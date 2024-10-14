@@ -75,9 +75,6 @@ get.type  <- function(variable){
     res <- data.frame(name = variable) %>%
         left_join(select(tool.survey, name, q.type), by = "name", na_matches = "never") %>%
         mutate(q.type = ifelse(is.na(q.type) & str_detect(name, "/"), "select_multiple", q.type))
-    if(any(is.na(res$q.type))){
-        warning(paste("Variables not found in tool.survey:", paste0(filter(res, is.na(q.type)) %>% pull(name),collapse = ", ")))
-    }
     return(pull(res, q.type))
 }
 
@@ -91,9 +88,6 @@ get.label <- function(variable){
   #' @param variable This is the name of the header from raw data.
   
   not_in_tool <- variable[!variable %in% tool.survey$name]
-  if(length(variable) > 0){
-    warning(paste("Variables not found in tool.survey:", paste0(not_in_tool, collapse = ", ")))
-  }
   if (any(str_detect(variable, "/"))) variable <- str_split(variable, "/", 2, T)[,1]
   res <- data.frame(name = variable) %>% 
     left_join(select(tool.survey, name, !!sym(label_colname)), by = "name", na_matches = "never")
@@ -101,7 +95,7 @@ get.label <- function(variable){
   return(pull(res, label_colname))
 }
 
-get.choice.label <- function(choice, list, simplify = FALSE){
+get.choice.label <- function(choice, tool.choices=NULL,label_colname=NULL, list, simplify = FALSE){
   #' Find the label of choices in a list
   #'
   #' Looks up the "name" and `label_colname` in tool.choices. Operates on single values and vectors.
@@ -109,17 +103,12 @@ get.choice.label <- function(choice, list, simplify = FALSE){
   #' @param choice the name of the choice
   #' @param list the name of the list containing choice
   #' @param simplify If TRUE, output labels will be modified and simplified...
-  
   if(!list %in% tool.choices$list_name) stop(paste("list",list, "not found in tool.choices!"))
   
   res <- data.frame(name = unlist(choice)) %>%
       left_join(select(tool.choices, name, list_name, label_colname) %>% filter(list_name == list),
                 by = "name", na_matches = "never")
-  if(any(is.na(res[[label_colname]]))){
-    culprits <- paste0(filter(res, is.na(!!sym(label_colname))) %>%
-                         pull(name), collapse = ", ")
-    warning(paste0("Choices not in the list (", list, "):", culprits))
-  }
+
   if(nrow(res) == 0) stop("All choices not in the list!")
   
   res_vec <- pull(res, label_colname)
@@ -240,4 +229,41 @@ get.trans.db <- function(include.all=c()){
     rename(label=label_colname) %>%
     select("name", "label")
   return(df1)
+}
+
+# ------------------------------------------------------------------------------------------
+xml2label_choices_multiple <- function(tool.survey = NULL, tool.choices = NULL,label_colname = NULL, data, col) {
+  # select all the columns with all the options for each select_multiple
+  d.join <- data %>% 
+    select(contains(paste0(col,"/")))
+  col_internal <- colnames(d.join)
+  
+  # for each column with options
+  for(j in 1:length(col_internal)){
+    # change all 1's to the xml answer
+    xml_answer <- str_split(col_internal[j], "/")[[1]][2]
+    d.join <- d.join %>% 
+      mutate(!!sym(col_internal[j]) := ifelse(!!sym(col_internal[j]) == "1", xml_answer, NA))
+    
+    # get the list of the xml and label options for each select multiple questions
+    choice_id <- filter(tool.survey, str_starts(name, str_split(col_internal[j],"/")[[1]][1])) %>% 
+      select(list_name)
+    choice_id <- choice_id$list_name
+    t.choices <- tool.choices %>% 
+      filter(list_name %in% choice_id) %>% 
+      select(name, label_colname) %>% rename(label = label_colname)
+    
+    # replace the xml with label using left_join
+    d.new.join <- data.frame(col=as.character(d.join[[col_internal[j]]])) %>%
+      left_join(t.choices, by=c("col"="name")) %>% select(label)
+    d.join[col_internal[j]] <- d.new.join$label
+  }
+  
+  # concatenate all the answers, removing NAs in one cell and separated by a ';' 
+  d.join <- d.join %>% 
+    unite("Merged", everything(), sep= ";", na.rm = T) %>% 
+    mutate(Merged = ifelse(Merged == "", NA, Merged))
+  
+  # return only the new label column and replace it in the for loop using vectors
+  return(d.join$Merged)
 }
