@@ -122,8 +122,8 @@ make_table.select_multiple <- function(srvyr.design.grouped, tool.choices=NULL,l
   
   res <- s_samples %>% left_join(s_props, by = disagg_vars)
 
-  res <- res %>% rename_with(~get.choice.label(sm_ccols_to_choices(.),tool.choices=tool.choices,label_colname = label_colname, entry$list_name, simplify = T),
-                             ends_with("_prop") & !contains("___NA"))
+  # res <- res %>% rename_with(~get.choice.label(sm_ccols_to_choices(.),tool.choices=tool.choices,label_colname = label_colname, entry$list_name, simplify = T),
+  #                            ends_with("_prop") & !contains("___NA"))
     # also convert the NA column:
   if(!entry$omit_na) res <- res %>% rename("NA" = !!paste0(entry$variable, "___NA_prop"))
   

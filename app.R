@@ -5,11 +5,9 @@ library(scales)
 library(stringr)
 library(DT)
 library(tidyverse)
-library(sf)
 library(cluster) 
 library(survey) 
 library(srvyr)
-# library(shinythemes)
 library(shinycssloaders)
 library(DescTools)
 library(shinybusy)
@@ -24,12 +22,16 @@ library(exactextractr)
 library(zip)
 library(mapview)
 library(shinyauthr)
+library(sf)
+library(Microsoft365R)
 library(shinyjs)
-webshot::install_phantomjs(force = T)
+# webshot::install_phantomjs(force = T)
 rm(list=ls())
 source("www/src/utils/misc_utils.R")
 source("www/src/utils/kobo_utils.R")
 source("www/src/utils/tabular_analysis_utils.R")
+source("www/src/STX_sharepoint_connector.R")
+
 options(shiny.maxRequestSize=100*1024^2,
         rsconnect.max.bundle.files = 5145728000)
 
@@ -39,46 +41,46 @@ $(function () {
   $('[data-toggle=tooltip]').tooltip()
 })
 "
-# base_map <- leaflet::leaflet() %>% leaflet::addProviderTiles(providers$CartoDB.Positron)
-# 
-# ongoing <- st_read("www/shapefile/ongoing.shp")
-# past <- st_read("www/shapefile/past.shp")
-# choose_country_map <- leaflet::leaflet(
-#   options = leafletOptions(
-#   attributionControl = F,
-#   zoomControl = F)) %>%  
-#   leaflet::addProviderTiles(providers$CartoDB.PositronNoLabels) %>% 
-#   leaflet::addPolygons(data= ongoing,
-#                        fillColor  = "black",
-#                        color = "#FFFFFF",
-#                        weight= 1,
-#                        fillOpacity = 0.8,
-#                        highlightOptions = highlightOptions(
-#                          fillColor = "#aaaaaa",
-#                          color = "#aaaaaa",
-#                          weight = 2,
-#                          bringToFront = T
-#                        ),
-#                        label = ~ongoing$ADMIN,
-#                        layerId = ~ongoing$ADMIN) %>% 
-#   leaflet::addPolygons(data= past,
-#                        fillColor  = "#cccccc",
-#                        color = "#FFFFFF",
-#                        weight= 1,
-#                        fillOpacity = 0.8,
-#                        highlightOptions = highlightOptions(
-#                          fillColor = "#444444",
-#                          color = "#444444",
-#                          weight = 2,
-#                          bringToFront = T
-#                        ),
-#                        label = ~past$ADMIN,
-#                        layerId = ~past$ADMIN) %>% 
-#   setView(lng = 10, lat = 20, zoom = 2) 
-#  
+base_map <- leaflet::leaflet() %>% leaflet::addProviderTiles(providers$CartoDB.Positron)
+
+ongoing <- st_read("www/shapefile/ongoing.shp")
+past <- st_read("www/shapefile/past.shp")
+choose_country_map <- leaflet::leaflet(
+  options = leafletOptions(
+  attributionControl = F,
+  zoomControl = F)) %>%
+  leaflet::addProviderTiles(providers$CartoDB.PositronNoLabels) %>%
+  leaflet::addPolygons(data= ongoing,
+                       fillColor  = "black",
+                       color = "#FFFFFF",
+                       weight= 1,
+                       fillOpacity = 0.8,
+                       highlightOptions = highlightOptions(
+                         fillColor = "#aaaaaa",
+                         color = "#aaaaaa",
+                         weight = 2,
+                         bringToFront = T
+                       ),
+                       label = ~ongoing$ADMIN,
+                       layerId = ~ongoing$ADMIN) %>%
+  leaflet::addPolygons(data= past,
+                       fillColor  = "#cccccc",
+                       color = "#FFFFFF",
+                       weight= 1,
+                       fillOpacity = 0.8,
+                       highlightOptions = highlightOptions(
+                         fillColor = "#444444",
+                         color = "#444444",
+                         weight = 2,
+                         bringToFront = T
+                       ),
+                       label = ~past$ADMIN,
+                       layerId = ~past$ADMIN) %>%
+  setView(lng = 10, lat = 20, zoom = 2)
+
 user_base <- tibble::tibble(
   user = c("admin","user"),
-  password = sapply(c("!mp@ct_!n!t!@t!ves","re@ch_!n!t!at!ves"), sodium::password_store),
+  password = sapply(c("admin","123456"), sodium::password_store),
   permissions = c("admin", "standard"),
   name = c("User One", "User Two")
 )
@@ -92,19 +94,19 @@ ui <- fluidPage(
     HTML('<script src="echarts.js"></script>'),
     HTML('<script src="REACH_Theme.js"></script>'),
     tags$script(HTML(js)),
-    # tags$script('
-    #                   var dimension = [0, 0];
-    #                   $(document).on("shiny:connected", function(e) {
-    #                   dimension[0] = document.getElementById("map").clientWidth;
-    #                   dimension[1] = document.getElementById("map").clientHeight;
-    #                   Shiny.onInputChange("dimension", dimension);
-    #                   });
-    #                   $(window).resize(function(e) {
-    #                   dimension[0] = document.getElementById("map").clientWidth;
-    #                   dimension[1] = document.getElementById("map").clientHeight;
-    #                   Shiny.onInputChange("dimension", dimension);
-    #                   });
-    #                   '),
+    tags$script('
+                      var dimension = [0, 0];
+                      $(document).on("shiny:connected", function(e) {
+                      dimension[0] = document.getElementById("map").clientWidth;
+                      dimension[1] = document.getElementById("map").clientHeight;
+                      Shiny.onInputChange("dimension", dimension);
+                      });
+                      $(window).resize(function(e) {
+                      dimension[0] = document.getElementById("map").clientWidth;
+                      dimension[1] = document.getElementById("map").clientHeight;
+                      Shiny.onInputChange("dimension", dimension);
+                      });
+                      '),
   ),
   uiOutput("css_style"),
   add_busy_bar(
@@ -114,7 +116,7 @@ ui <- fluidPage(
   navbarPage(id = "tabs",
              windowTitle = "ANALYSIS APP", 
              
-             HTML('<a style="padding-left:10px;" class="navbar-brand" href= "https://abrahamaz.github,io/" target="_blank"><img src="logo_beginning.png" height = "50"></a><span class="navbar-text" style="font-size: 16px; color: #FFFFFF"><strong>ANALYSIS APP</strong></span>'),
+             HTML('<a style="padding-left:10px;" class="navbar-brand" href= "https://abrahamaz.github.io/" target="_blank"><img src="logo_beginning.png" height = "50"></a><span class="navbar-text" style="font-size: 16px; color: #FFFFFF"><strong>ANALYSIS APP</strong></span>'),
              
              tabPanel("Read Me",
                       div(class ="title-message",
@@ -153,32 +155,33 @@ ui <- fluidPage(
                                tags$li(em(strong("Overall: ")),"[Selected] will consider the calculations to the overall population."),
                                tags$li(em(strong("Strata: ")),"[Selected] will consider the calculations by different popluation groups (Strata).")
                              ),
-                             h4(style = "font-size:20px;",strong("Map Output")),
-                             tags$ul(
-                               tags$li(em(strong("Admin: ")),"Admin Shapefile to be used as Map Layer."),
-                               tags$li(em(strong("Sheet: ")),"Different Tabs of the uploaded dataset (HH or Individual)."),
-                               tags$li(em(strong("Variable: ")),"Variable to analyse and show on the Map."),
-                               tags$li(em(strong("Category: ")),"Categories of the selected variable."),
-                               tags$li(em(strong("Color Palette: ")),"REACH/IMPACT/AGORA Color Palettes"),
-                               tags$li(em(strong("Weighting: ")),"[Yes] or [No] to include weighting to data."),
-                             ),
+                             # h4(style = "font-size:20px;",strong("Map Output")),
+                             # tags$ul(
+                             #   tags$li(em(strong("Admin: ")),"Admin Shapefile to be used as Map Layer."),
+                             #   tags$li(em(strong("Sheet: ")),"Different Tabs of the uploaded dataset (HH or Individual)."),
+                             #   tags$li(em(strong("Variable: ")),"Variable to analyse and show on the Map."),
+                             #   tags$li(em(strong("Category: ")),"Categories of the selected variable."),
+                             #   tags$li(em(strong("Color Palette: ")),"REACH/IMPACT/AGORA Color Palettes"),
+                             #   tags$li(em(strong("Weighting: ")),"[Yes] or [No] to include weighting to data."),
+                             # ),
                              h3(class = "title-message","Methodology"),
                              h4(style = "font-size:20px;",strong("Input Data")),
                              p("To be able to use all the functionalities of this tool, you should upload the cleaned data, the Kobo tool, and select the country related to the assessment (This is a required selection for the Map Output tab to start processing). "),
-                             h4(style = "font-size:20px;",strong("Singular Table/Graph Output")),
-                             p("First, you will be able to select the respective sheet from your dataset (main sheet or other loops). Second, the other dropdown lists are the targeted variable for the analysis from the selected sheet as well as the disaggregated variabled to be added towards the targeted variable."),
+                            
                       ),
                       column(class = "column2",
                              style = "margin-left: 130px;",
                              width = 4,
                              br(),
+                             h4(style = "font-size:20px;",strong("Singular Table/Graph Output")),
+                             p("First, you will be able to select the respective sheet from your dataset (main sheet or other loops). Second, the other dropdown lists are the targeted variable for the analysis from the selected sheet as well as the disaggregated variabled to be added towards the targeted variable."),
                              p("The ",em("variable and disaggregation"),"are mainly the select_one, select_multiple, and different numeric columns from your dataset. In case some of these columns are", strong("empty"),"in your data, it will not be shown in the dropdown list."),
                              p("The output is an interactive table/graph that will be updated automatically depending on your different selections in the Parameters section on the left or even the variable or disagregation."),
                              p("For the tabular tab, if the selected variable is a select_one or select_multiple, the table will output percentages of the different categories of the selected variable. If the selected variable is numeric, then the table will mainly show the mean, median, min, and max values in the data."),
-                             h4(style = "font-size:20px;",strong("Map Output")),
-                             p("First you will have to select the respective admin level that you want to show your level of disaggregation on the map. Keep in mind that you should have a column in your data that include similar pattern PCODE to the selected admin level."),
-                             p("The application will automatically scan through all the columns of your data and identify the column/s that have similar pattern and will prompt you with the retrieved column/s name/s. Select [Yes] if it is the correct column to proceed. You might be prompt with a message to recheck if you have the similar pattern in your data."),
-                             p("Then you will be able to select between showing the geographical distribution of your submission by selecting [Distribution], or you can select through the different variables of your data and respectively select between the categories of the selected variable to show their distribution over the selected admin."),
+                             # h4(style = "font-size:20px;",strong("Map Output")),
+                             # p("First you will have to select the respective admin level that you want to show your level of disaggregation on the map. Keep in mind that you should have a column in your data that include similar pattern PCODE to the selected admin level."),
+                             # p("The application will automatically scan through all the columns of your data and identify the column/s that have similar pattern and will prompt you with the retrieved column/s name/s. Select [Yes] if it is the correct column to proceed. You might be prompt with a message to recheck if you have the similar pattern in your data."),
+                             # p("Then you will be able to select between showing the geographical distribution of your submission by selecting [Distribution], or you can select through the different variables of your data and respectively select between the categories of the selected variable to show their distribution over the selected admin."),
                              h3(class = "title-message","Requirements"),
                              h4(style = "font-size:20px;",strong("Singular Table/Graph Output")),
                              p("The Data downloaded should be of an Excel format. If the dataset is only including one tab (no loops included in the data), the sheet should be named ", strong('main.'),"If the Data include many tabs (Data with loops), please ensure that the first tab is named ", strong('main,'),"and then the others kept as downloaded from the Kobo Server (as named by the name value of the respective begin_repeat row)."),
@@ -192,9 +195,8 @@ ui <- fluidPage(
                              # hr(),
                              ##ADDDD MAPPPP COMPONENT
                              h3(class = "title-message","Credits"),
-                             p("This application was built by Abraham Azar. For any information or question, please contact abraham.azar@impact-initiatives.org"),
+                             p("This application was built by Abraham Azar. For any information or question, please contact abraham.azar30@outlook.com"),
                              p("The variance tool was built by Nestor Cheryba. For any information or question, please contact nestor.cheryba@reach-initiative.org"),
-                             p("Huge thanks to Mariia Tomashchuk for the GIS support")
                       )
              ),
              tabPanel("Login",
@@ -222,14 +224,14 @@ ui <- fluidPage(
                           div(class = "input-box",
                               style = "padding:20px; margin: 0 0 28px 0",
                               uiOutput("language_selection")
-                          )
-                          # div(class ="input-box-3",
-                          #     div(class="title-map", "Select the country related to the inputed data"),
-                          #     div(class="item3",
-                          #         leafletOutput("country_choice", height = '550px'),
-                          #         imageOutput('legend', height = '0', width ='0')
-                          #         )
-                          #       )
+                          ),
+                          div(class ="input-box-3",
+                              div(class="title-map", "Select the country related to the inputed data"),
+                              div(class="item3",
+                                  leafletOutput("country_choice", height = '550px'),
+                                  imageOutput('legend', height = '0', width ='0')
+                                  )
+                                )
                       )),
              tabPanel("Singular Table Output / Variance",
                       sidebarPanel(
@@ -279,31 +281,33 @@ ui <- fluidPage(
                         uiOutput("textPlot"),
                         echarts4rOutput("plotGraph", width = '100%', height = '620px')
                       )
-             )
+             ),
              
-             # tabPanel("Map Output",
-             #          sidebarPanel(
-             #            uiOutput("country_title"),
-             #            uiOutput("admin_choice"),
-             #            uiOutput("sheetInputMap"),
-             #            uiOutput("correct_column"),
-             #            uiOutput("admin_data_col"),
-             #            uiOutput("type_of_map"),
-             #            uiOutput("varMap"),
-             #            uiOutput("categoryMap"),
-             #            uiOutput("color"),
-             #            uiOutput("weightMap"),
-             #            uiOutput("buildBTN"),
-             #            uiOutput("downloadBtn")
-             #          ),
-             #          mainPanel(
-             #            uiOutput("map"),
-             #            uiOutput("tableMap")
-             #          )
-             # )
-             # , 
+             tabPanel("Map Output",
+                      sidebarPanel(
+                        uiOutput("country_title"),
+                        uiOutput("admin_choice"),
+                        uiOutput("sheetInputMap"),
+                        uiOutput("correct_column"),
+                        uiOutput("admin_data_col"),
+                        uiOutput("type_of_map"),
+                        uiOutput("varMap"),
+                        uiOutput("categoryMap"),
+                        uiOutput("color"),
+                        uiOutput("weightMap"),
+                        uiOutput("buildBTN"),
+                        uiOutput("downloadBtn")
+                      ),
+                      mainPanel(
+                        uiOutput("map"),
+                        uiOutput("tableMap")
+                      )
+             )
+             ,
   )
 )
+
+
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
   
@@ -315,7 +319,7 @@ server <- function(input, output, session) {
     sodium_hashed = TRUE,
     log_out = reactive(logout_init())
   )
-  # 
+
   # Logout tso hide
   logout_init <- shinyauthr::logoutServer(
     id = "logout",
@@ -327,12 +331,12 @@ server <- function(input, output, session) {
     if(!credentials()$user_auth){
       hideTab(inputId = "tabs", target = "Singular Table Output / Variance")
       hideTab(inputId = "tabs", target = "Singular Graph Output")
-      # hideTab(inputId = "tabs", target = "Map Output")
+      hideTab(inputId = "tabs", target = "Map Output")
       hideTab(inputId = "tabs", target = "Input Data")
     } else {
       showTab(inputId = "tabs", target = "Singular Table Output / Variance")
       showTab(inputId = "tabs", target = "Singular Graph Output")
-      # showTab(inputId = "tabs", target = "Map Output")
+      showTab(inputId = "tabs", target = "Map Output")
       showTab(inputId = "tabs", target = "Input Data")
     }
   })
@@ -365,6 +369,7 @@ server <- function(input, output, session) {
              list_name=ifelse(str_starts(type, "select_"), list_name, NA))
     
     
+    
     # select only the relevant (English) labels, hints etc.
     lang_code <- str_split(label_colname(), "::", 2, T)[2]
     lang_code <- str_replace(str_replace(lang_code, "\\(", "\\\\("), "\\)", "\\\\)")
@@ -377,8 +382,8 @@ server <- function(input, output, session) {
     # Find which data sheet question belongs to:
     tool.survey <- tool.survey %>% mutate(datasheet = NA)
     sheet_names <- excel_sheets(input$dataInput$datapath)
+    # sheet_names[1] <- "main"
     sheet_name <- sheet_names[1]
-    # sheet_name <- "main"
     for(i in 1:nrow(tool.survey)){
       toolrow <- tool.survey %>% slice(i)
       if(str_detect(toolrow$type, "begin[ _]repeat")) sheet_name <- toolrow$name
@@ -386,6 +391,7 @@ server <- function(input, output, session) {
       # else if(str_detect(toolrow$type, "end[ _]repeat")) sheet_name <- "main"  # watch out for nested repeats (Why would you even want to do that?)
       else if(str_detect(toolrow$type, "((end)|(begin))[ _]group", T)) tool.survey[i, "datasheet"] <- sheet_name
     }
+    
     return(tool.survey)
   })
   
@@ -406,6 +412,7 @@ server <- function(input, output, session) {
     req(input$toolInput$datapath,
         input$dataInput$datapath)
     tool_var <- excel_sheets(input$dataInput$datapath)
+    # tool_var[1] <- "main"
     # tool_var <-  tool.survey() %>% filter(!is.na(datasheet)) %>% pull(datasheet) %>% unique()
     selectInput("sheet","Sheet",
                 choices = c(tool_var),
@@ -518,8 +525,10 @@ server <- function(input, output, session) {
         input$weightBTN)
     tool.survey <- tool.survey()
     sheet_names <- excel_sheets(input$dataInput$datapath)
-    sheet_names[1] <- "main"
-    data.list <- list("main" = read_excel(input$dataInput$datapath, sheet=1, col_types = "text"))
+    # sheet_names[1] <- "main"
+    # data.list <- list("main" = read_excel(input$dataInput$datapath, sheet=1, col_types = "text"))
+    data.list <- list(read_excel(input$dataInput$datapath, sheet=1, col_types = "text"))
+    names(data.list)[1] <- sheet_names[1]
     for(sheet in sheet_names[-1])
       data.list[[sheet]] <- read_excel(input$dataInput$datapath, sheet=sheet, col_types = "text")
     tool_datasheets <- tool.survey %>% distinct(datasheet) %>% filter(!is.na(.)) %>% pull
@@ -604,14 +613,17 @@ server <- function(input, output, session) {
     sheet <- input$sheet
     col <- input$variable
     disag.col <- input$dis_variables
+    sheet_names <- excel_sheets(input$dataInput$datapath)
+    
     if(!all(is.na(entry$disaggregate.variables))){
       for(disagg.var in entry$disaggregate.variables){
         if(!disagg.var %in% colnames(data.list[[sheet]])){
           # disagg.var was not found, but maybe it's located in main? let's try to fix!
-          if(sheet == "main") stop("Disaggregation variable ", disagg.var, " was not found in main!!\n")
-          if(disagg.var %in% colnames(data.list$main)){
+          # if(sheet == "main") stop("Disaggregation variable ", disagg.var, " was not found in main!!\n")
+          if(sheet == sheet_names[1]) stop("Disaggregation variable ", disagg.var, " was not found in main!!\n")
+          if(disagg.var %in% colnames(data.list[[sheet_names[1]]])){
             # cat("... Disaggregation variable", disagg.var,"was not found in sheet",sheet,"but it exists in main. Will attempt to simply left_join by uuid... ")
-            join_attempt <- data.list()$main %>% dplyr::select(uuid, !!sym(disagg.var))
+            join_attempt <- data.list()[[sheet_names[1]]] %>% dplyr::select(uuid, !!sym(disagg.var))
             data.list[[sheet]] <- data.list[[sheet]] %>% left_join(join_attempt, by = "uuid")
             # cat(" success!")
           }else stop(paste("Disaggregation variable", disagg.var, "not found in sheet",sheet,"nor in main!!\n"))
@@ -899,8 +911,9 @@ server <- function(input, output, session) {
         input$weightBTNGraph)
     tool.survey <- tool.survey()
     sheet_names <- excel_sheets(input$dataInput$datapath)
-    sheet_names[1] <- "main"
-    data.list <- list("main" = read_excel(input$dataInput$datapath, sheet=1, col_types = "text"))
+    sheet_name <- sheet_names[1]
+    data.list <- list(read_excel(input$dataInput$datapath, sheet=1, col_types = "text"))
+    names(data.list)[1] <- sheet_name
     for(sheet in sheet_names[-1])
       data.list[[sheet]] <- read_excel(input$dataInput$datapath, sheet=sheet, col_types = "text")
     tool_datasheets <- tool.survey %>% distinct(datasheet) %>% filter(!is.na(.)) %>% pull
@@ -954,15 +967,16 @@ server <- function(input, output, session) {
     sheet <- input$sheetGraph
     col <- input$variableGraph
     disag.col <- input$dis_variables_Graph
+    sheet_names <- excel_sheets(input$dataInput$datapath)
     if(!all(is.na(entry$disaggregate.variables))){
       for(disagg.var in entry$disaggregate.variables){
         if(!disagg.var %in% colnames(data.list[[sheet]])){
           # disagg.var was not found, but maybe it's located in main? let's try to fix!
           if(sheet == sheet_names[1]) stop("Disaggregation variable ", disagg.var, " was not found in main!!\n")
-          if(sheet == "main") stop("Disaggregation variable ", disagg.var, " was not found in main!!\n")
-          if(disagg.var %in% colnames(data.list$main)){
+          # if(sheet == "main") stop("Disaggregation variable ", disagg.var, " was not found in main!!\n")
+          if(disagg.var %in% colnames(data.list[[sheet_names[1]]])){
             # cat("... Disaggregation variable", disagg.var,"was not found in sheet",sheet,"but it exists in main. Will attempt to simply left_join by uuid... ")
-            join_attempt <- data.list()$main %>% dplyr::select(uuid, !!sym(disagg.var))
+            join_attempt <- data.list()[[sheet_names[1]]] %>% dplyr::select(uuid, !!sym(disagg.var))
             data.list[[sheet]] <- data.list[[sheet]] %>% left_join(join_attempt, by = "uuid")
             # cat(" success!")
           }else stop(paste("Disaggregation variable", disagg.var, "not found in sheet",sheet,"nor in main!!\n"))
@@ -2384,907 +2398,908 @@ server <- function(input, output, session) {
   #  ############################################################################################################
   #  #                                                     MAP                                                  #
   #  ############################################################################################################
-  #  output$legend <- renderImage({
-  #    list(src = "www/legend.png",
-  #         alt = "Legend", height = '55px', width ='70px')
-  #  }, deleteFile = F)
-  #  
-  #  ########## Country map in the Input data page ##########
-  #  output$country_choice <- renderLeaflet({
-  #    choose_country_map
-  #  })
-  #  
-  #  observeEvent(input$country_choice_shape_click, {
-  # 
-  #    new_selected <- req(input$country_choice_shape_click)
-  #    
-  #    isolate(old_selected <- rv$selected)
-  # 
-  #    if(is.null(old_selected) || ((new_selected$id != old_selected$id) && !is.null(new_selected$id))){
-  #      if(new_selected$id %in% past$ADMIN){
-  #        rv$selected <- new_selected
-  #      } else {
-  #        rv$selected <- new_selected
-  #        rv$country <- input$country_choice_shape_click$id
-  #        country_iso <- ongoing %>% 
-  #          filter(ADMIN == rv$country)
-  #        leafletProxy("country_choice") %>% 
-  #          clearGroup("selection") %>%
-  #          addPolygons(data = country_iso,
-  #                      fillColor = "#EE5859",
-  #                      fillOpacity = 1,
-  #                      color = "transparent",
-  #                      label = ~country_iso$ADMIN,
-  #                      group = "selection") %>% 
-  #          setView(lng = new_selected$lng, lat = new_selected$lat, zoom = 5)
-  #      }
-  #    } else {
-  #        rv$selected <- NULL
-  #        leafletProxy("country_choice") %>% 
-  #          clearGroup("selection") %>% 
-  #          setView(lng = 0, lat = 20, zoom = 2) 
-  #    }
-  #  })
-  #  ########## Reactive values ##########
-  #  rv <- reactiveValues()
-  #  rv$selected <- NULL
-  # 
-  #  
-  #  ########## Country Selected Title ##########
-  #  observeEvent(rv$country,{
-  #    output$country_title <- renderUI({
-  #        HTML(paste0("<h4>Country selected: <strong>",rv$country,"</strong></h3>"))
-  #    })
-  #  })
-  #  
-  #  ########## Admin list Boundaries selection ##########
-  #  admin_list <- reactive({
-  #    req(rv$country)
-  #    adminBnd <- file_list %>%
-  #      filter(country == rv$country,
-  #             !str_detect(adminBnd,"0")) %>%
-  #      arrange(adminBnd) %>%
-  #      pull(adminBnd) %>% unique
-  #    return(adminBnd)
-  #  })
-  #  
-  #  output$admin_choice <- renderUI({
-  #    req(rv$country)
-  #    if(rv$country == "Haiti") {
-  #      HTML("<h4  style = 'color: rgba(238, 88, 89, .8)'>Unfortunately, we lack proper Admin Shapefiles for Haiti.</h4>")
-  #    } else {
-  #      selectizeInput("adminBnd","Admin Boundary Selection",
-  #                   choices = c("", admin_list()),
-  #                   multiple = F)
-  #    }
-  #  })
-  #  
-  #  
-  #  ########## Getting the Sheet input ##########
-  #  output$sheetInputMap <- renderUI({
-  #    req(input$dataInput$datapath,
-  #        input$toolInput$datapath,
-  #        input$adminBnd)
-  #    tool_var <- excel_sheets(input$dataInput$datapath)
-  #    selectInput("sheetMap","Dataset Sheet Selection",
-  #                choices = c(tool_var),
-  #                selected = NULL,
-  #                multiple = F)
-  #  })
-  # 
-  #  
-  #  
-  #  ########## Getting the Correct Column Input ##########
-  #  
-  #  
-  #  admin_column <- reactive({
-  #    req(input$dataInput$datapath,
-  #        input$toolInput$datapath,
-  #        input$sheetMap,
-  #        input$adminBnd)
-  #    df <- read_excel(input$dataInput$datapath,sheet = input$sheetMap, col_types = "text")   
-  #    tool_var <- tool.survey() %>%
-  #      filter(q.type %in% c("integer","select_one","select_multiple","decimal") & datasheet == input$sheetMap & name %in% colnames(df)) %>% pull(name) %>% unique
-  #    if(length(tool_var)>0){
-  #      pattern <- regex_pattern()
-  #      
-  #      # Function to check if all values in a column match the regex pattern
-  #      all_values_match_pattern <- function(column, pattern) {
-  #        all(grepl(pattern, column))
-  #      }
-  #      # Apply the function to each column in the dataframe
-  #      matching_columns <- df %>%
-  #        select_if(~all_values_match_pattern(.x, pattern)) %>% 
-  #        names()
-  #    }else {
-  #      matching_columns <- "not_matching"
-  #    }
-  # 
-  #    return(matching_columns)
-  #  })
-  #  
-  #  output$correct_column <- renderUI({
-  #    req(input$sheetMap)
-  #    withProgress(
-  #      message = "Calculating matching columns...",
-  #      detail = "This may take a moment...",
-  #      value = NULL, {
-  #        if(length(admin_column())>1){
-  #          admin_column <- paste(admin_column(), collapse = ' or ')
-  #          title <- paste0("Is ",admin_column," the correct column?")
-  #          radioButtons("correct_column_one", title,
-  #                       choices = c(No = "no", Yes = "yes"),
-  #                       selected = character(0))
-  #        } else if (length(admin_column()) == 0){
-  #          HTML("<h4  style = 'color: rgba(238, 88, 89, .8)'>Please ensure to have a column in your data matching the PCODE column of the Admin selected</h4>")
-  #        } else if (admin_column() == "not_matching"){
-  #          HTML("<h4  style = 'color: rgba(238, 88, 89, .8)'>Please check that the sheet names of the dataset are matching with the tool</h4>")
-  #        } else {
-  #          admin_column <- admin_column()
-  #          title <- paste0("Is ",admin_column," the correct column?")
-  #          radioButtons("correct_column_one", title,
-  #                       choices = c(No = "no", Yes = "yes"),
-  #                       selected = character(0))
-  #        }
-  #        # Render the radioButtons once matching_columns is ready
-  #      }
-  #    )
-  # 
-  #  }) %>%
-  #    bindCache(c(input$dataInput$datapath,
-  #                input$toolInput$datapath,
-  #                input$adminBnd,
-  #                input$sheetMap))
-  #  
-  #  ########## Strata column if correct column is not correct ##########
-  #  output$admin_data_col <- renderUI({
-  #    req(input$sheetMap,
-  #        input$adminBnd,
-  #        input$correct_column_one)
-  #    admin_column <- admin_column()
-  #    if(input$correct_column_one == "yes"){
-  #      selectizeInput("admin_data_col_choice","Matching Admin Column in Data",
-  #                     choices = admin_column,
-  #                     multiple = F)
-  #    } else if(length(admin_column) == 0){
-  # 
-  #    } else{
-  #      HTML("<h4 style = 'color: rgba(238, 88, 89, .8)'>Please ensure to have a column in your data matching the PCODE column of the Admin selected</h4>")
-  #    }
-  #  })%>%
-  #    bindCache(c(input$dataInput$datapath,
-  #                input$toolInput$datapath,
-  #                input$adminBnd,
-  #                input$sheetMap,
-  #                input$correct_column_one))
-  #  
-  #  
-  #  ########## Getting the Variable Input ##########
-  # 
-  #   output$varMap <- renderUI({
-  #      req(input$dataInput$datapath,
-  #          input$toolInput$datapath,
-  #          input$sheetMap,
-  #          input$adminBnd,
-  #          input$admin_data_col_choice,
-  #          input$correct_column_one)
-  #      df <- read_excel(input$dataInput$datapath,sheet = input$sheetMap, col_types = "text")
-  #      empty_columns <- names(df[, colSums(is.na(df) | df == "") == nrow(df)])
-  #      tool_var <- tool.survey() %>%
-  #         filter(q.type %in% c("integer","select_one","select_multiple","decimal") & datasheet == input$sheetMap & name %in% colnames(df) & name != input$admin_data_col_choice & !name %in% empty_columns) %>% pull(name) %>% unique
-  #      if(length(tool_var)>0 & !is.null(input$admin_data_col_choice) & input$correct_column_one  == "yes"){
-  #        selectizeInput("variableMap","Distribution / Variables",
-  #                       choices = list(Distribution = "Distribution",Variables =  tool_var),
-  #                       selected = character(0),
-  #                       multiple = T,
-  #                       options = list(maxOptions = 1000L, maxItems = 1))
-  #      } 
-  #    }) %>% 
-  #    bindCache(c(input$dataInput$datapath,
-  #                input$toolInput$datapath,
-  #                input$sheetMap,
-  #                input$adminBnd,
-  #                input$admin_data_col_choice,
-  #                input$correct_column_one))
-  # 
-  #   
-  # 
-  #  ########## Getting the Color Input ##########
-  #  
-  #  output$color <- renderUI({
-  #    req(input$adminBnd,
-  #        input$correct_column_one,
-  #        input$variableMap,
-  #        input$category)
-  #      selectInput("colorPalette", "Color Palette",
-  #                  choices = list(
-  #                    REACH = list(Red = "red",
-  #                                 Blue = "blue",
-  #                                 Green = "green",
-  #                                 Brown ="brown"),
-  #                    IMPACT = list(),
-  #                    AGORA = list()))
-  #  })
-  #  
-  #  
-  #  ########## Getting the entry ##########
-  #  entryMap <- reactive({
-  #    req(input$variableMap,
-  #        input$admin_data_col_choice,
-  #        input$correct_column_one)
-  #    admin_data_col_choice <- input$admin_data_col_choice
-  #    if(input$variableMap != "Distribution"){
-  #      entry <- list()
-  #      entry$variable <- input$variableMap
-  #      not_in_tool <- input$variableMap[!input$variableMap %in% tool.survey()$name]
-  #      if (any(str_detect(input$variableMap, "/"))) input$variableMap <- str_split(input$variableMap, "/", 2, T)[,1]
-  #      res <- data.frame(name = input$variableMap) %>%
-  #        left_join(dplyr::select(tool.survey(), name, !!sym(label_colname())), by = "name", na_matches = "never") %>%
-  #        pull(label_colname())
-  #      if(is.na(res)){
-  #        entry$label <- "No label"
-  #      } else{
-  #        entry$label <- res
-  #      }
-  #      entry$disaggregate.variables <- NA
-  #      entry$disaggregations <- NA
-  #      
-  #      if (is.na(input$calculation)){
-  #        entry$calculation <- NA
-  #      } else{
-  #        entry$calculation <- input$calculation
-  #      }
-  #      entry$func <- tool.survey() %>%
-  #        filter(name == input$variableMap) %>% pull(q.type)
-  #      
-  #      if(entry$func %in% c("calculate","integer","decimal")) entry$func <- "numeric"
-  #      
-  #      entry$var_type <- input$func
-  #      entry$admin <- admin_data_col_choice
-  #      entry$list_name <- tool.survey() %>%
-  #        filter(name == input$variableMap) %>% pull(list_name)
-  #      entry$comments <- ''
-  #      entry$datasheet<- tool.survey() %>%
-  #        filter(name == input$variableMap) %>% pull(datasheet)
-  #      if (input$calculation == "include_na"){
-  #        entry$omit_na <- F
-  #      } else{
-  #        entry$omit_na <- T
-  #      }
-  #      if (input$calculation == "add_total"){
-  #        entry$add_total <- T
-  #      } else{
-  #        entry$add_total <- F
-  #      }
-  #    }
-  #    return(entry)
-  #  })
-  #  ########## Getting the Data List ##########
-  #  data.listMap <- reactive({
-  #    req(input$dataInput$datapath,
-  #        input$weightBTNMap,
-  #        input$variableMap)
-  #    tool.survey <- tool.survey()
-  #    sheet_names <- excel_sheets(input$dataInput$datapath)
-  #    sheet_names[1] <- "main"
-  #    data.list <- list("main" = read_excel(input$dataInput$datapath, sheet=1, col_types = "text"))
-  #    for(sheet in sheet_names[-1])
-  #      data.list[[sheet]] <- read_excel(input$dataInput$datapath, sheet=sheet, col_types = "text")
-  #    tool_datasheets <- tool.survey %>% distinct(datasheet) %>% filter(!is.na(.)) %>% pull
-  #    for (sheet in sheet_names[-1]) {
-  #      # take the first column from this sheet and find it in tool.survey
-  #      i <- 1
-  #      data_cnames <- data.list[[sheet]] %>% dplyr::select(-contains("/"), -starts_with("_")) %>% names
-  #      first_col <- data_cnames[i]
-  #      while (!first_col %in% tool.survey()$name) {
-  #        i <- i + 1
-  #        first_col <- data_cnames[i]
-  #      }
-  #      old_sheetname <- tool.survey %>% filter(name == first_col) %>% pull(datasheet)
-  #      # change all occurences of `old_sheetname` to `sheet`
-  #      tool.survey <- tool.survey %>% mutate(datasheet = ifelse(datasheet %==na% old_sheetname, sheet, datasheet))
-  #    }
-  #    for (sheet in names(data.list)){
-  #      if(input$weightBTNMap == "no") {
-  #        data.list[[sheet]] <- data.list[[sheet]] %>%
-  #          mutate(overall = "overall",
-  #                 weight = 1)
-  #      } else if (input$weightBTNMap == "yes" & "weight" %in% colnames(data.list[[sheet]])){
-  #        data.list[[sheet]] <- data.list[[sheet]] %>%
-  #          mutate(overall = "overall",
-  #                 weight = as.numeric(weight)) 
-  #        
-  #      } else{
-  #        data.list[[sheet]] <- data.list[[sheet]] %>%
-  #          mutate(overall = "overall",
-  #                 weight = 1) 
-  #      }
-  #    }
-  #    tryCatch(
-  #      return(data.list), error = function(err) return(data.frame())
-  #    )
-  #  })
-  #  ########## Creating the Srvyr Design List ##########
-  #  srvyr.designsMap <- reactive({
-  #    req(input$sheetMap,
-  #        input$variableMap,
-  #        input$admin_data_col_choice,
-  #        input$weightBTNMap,
-  #        input$correct_column_one)
-  #    if(input$variableMap != "Distribution"){
-  #      data.list <- data.listMap()
-  #      srvyr.designs <- list()
-  #      entry <- entryMap()
-  #      tool.survey <- tool.survey()
-  #      tool.choices <- tool.choices()
-  #      sheet <- input$sheetMap
-  #      col <- input$variableMap
-  #      disag.col <- input$admin_data_col_choice
-  #      if(!all(is.na(entry$disaggregate.variables))){
-  #        for(disagg.var in entry$disaggregate.variables){
-  #          if(!disagg.var %in% colnames(data.list[[sheet]])){
-  #            # disagg.var was not found, but maybe it's located in main? let's try to fix!
-  #            if(sheet == "main") stop("Disaggregation variable ", disagg.var, " was not found in main!!\n")
-  #            if(disagg.var %in% colnames(data.list$main)){
-  #              # cat("... Disaggregation variable", disagg.var,"was not found in sheet",sheet,"but it exists in main. Will attempt to simply left_join by uuid... ")
-  #              join_attempt <- data.list()$main %>% dplyr::select(uuid, !!sym(disagg.var))
-  #              data.list[[sheet]] <- data.list[[sheet]] %>% left_join(join_attempt, by = "uuid")
-  #              # cat(" success!")
-  #            }else stop(paste("Disaggregation variable", disagg.var, "not found in sheet",sheet,"nor in main!!\n"))
-  #          }
-  #          data.list[[sheet]][[disagg.var]] <- as.character(data.list[[sheet]][[disagg.var]])  # as character, not factor!
-  #        }
-  #      }
-  #      if(entry$func == "select_multiple"){
-  #        # not converting to label here. instead just replace "/" with "___" and convert to numeric
-  #        choice_cols <- colnames(data.list[[sheet]])[colnames(data.list[[sheet]]) %>% str_starts(paste0(col, "/"))]
-  #        data.list[[sheet]] <- data.list[[sheet]] %>%
-  #          mutate(across(all_of(choice_cols), as.numeric)) %>%
-  #          rename_with(~str_replace(., "/", "___"), choice_cols)
-  #        if(!entry$omit_na){
-  #          # change NAs from all other choice columns to 0
-  #          data.list[[sheet]] <- data.list[[sheet]] %>%
-  #            mutate(across(starts_with(paste0(col,"___")), ~replace_na(., 0)))
-  #          # create a new NA column
-  #          na_colname <- paste0(col,"___NA")
-  #          data.list[[sheet]][[na_colname]] <- is.na(data.list[[sheet]][[col]]) %>% as.numeric
-  #          data.list[[sheet]] <- data.list[[sheet]] %>% relocate(all_of(na_colname), .after = !!sym(col))
-  #        }
-  #      }else {
-  #        if(entry$func == "select_one") {
-  #          # try to convert to label:
-  #          choice_names <- tool.choices %>% filter(list_name == entry$list_name) %>% pull(name)
-  #          not_in_choices <- data.list[[sheet]] %>% filter(!(!!sym(col) %in% choice_names) & !isna(!!sym(col))) %>%
-  #            pull(!!sym(col)) %>% unique
-  #          if(length(not_in_choices) > 0){
-  #            conv_vec <- data.list[[sheet]][[col]]
-  #          }else{
-  #            if(!entry$list_name %in% tool.choices$list_name) stop(paste("list",entry$list_name, "not found in tool.choices!"))
-  #            
-  #            res <- data.frame(name = unlist(data.list[[sheet]][[col]])) %>%
-  #              left_join(dplyr::select(tool.choices, name, list_name, label_colname()) %>% filter(list_name == entry$list_name),
-  #                        by = "name", na_matches = "never")
-  #            if(nrow(res) == 0) stop("All choices not in the list!")
-  #            
-  #            conv_vec <- pull(res, label_colname())
-  #          }
-  #          if(entry$omit_na) {
-  #            data.list[[sheet]][[col]] <- factor(conv_vec, exclude = NA)
-  #          }else{
-  #            data.list[[sheet]][[col]] <- factor(conv_vec, exclude = NULL)
-  #          }
-  #          rm(conv_vec, choice_names, not_in_choices)
-  #        }
-  #        else if(entry$func %in% c("mean", "median", "integer", "numeric","decimal")) data.list[[sheet]][[col]] <- as.numeric(data.list[[sheet]][[col]])
-  #      }
-  #      ## Deal with disaggregated change to Label
-  #      survey_data <- data.list[[sheet]]
-  #      srvyr.designs[[sheet]] <- as_survey_design(survey_data, weights = weight)
-  #    }
-  #    return(srvyr.designs)
-  #  })
-  #  ########## Creating the table ##########
-  #  tableMap <- reactive({
-  #    req(input$sheetMap,
-  #        input$variableMap,
-  #        input$weightBTNMap)
-  #    if(input$variableMap != "Distribution"){
-  #      entry <- entryMap()
-  #      tool.choices <- tool.choices()
-  #      label_colname <- label_colname()
-  #      srvyr.design <- srvyr.designsMap()
-  #      if(entry$omit_na) srvyr.design[[input$sheetMap]] <- srvyr.design[[input$sheetMap]] %>% filter(!is.na(!!sym(input$variableMap)))
-  #      srvyr.design[[input$sheetMap]]  <- srvyr.design[[input$sheetMap]] %>% group_by(!!sym(entry$admin))
-  #      for (disagg.var in entry$disaggregate.variables) {
-  #        res <- make_table(srvyr.design[[input$sheetMap]],tool.choices = tool.choices, label_colname = label_colname, entry, disagg.var) %>% ungroup %>% dplyr::select(-any_of("overall"))
-  #        # add overall
-  #        if(entry$admin != "overall"){
-  #          entry.ovrl <- entry
-  #          entry.ovrl$admin <- "overall"
-  #          if(!"overall" %in% (srvyr.design[[input$sheetMap]] %>% variable.names)) srvyr.design[[input$sheetMap]] <- srvyr.design[[input$sheetMap]] %>% mutate(overall = "overall")
-  #          res.overall <- make_table(srvyr.design[[input$sheetMap]] %>% ungroup %>% group_by(overall),tool.choices = tool.choices, label_colname = label_colname,
-  #                                    entry.ovrl, disagg.var)  %>%
-  #            mutate(!!sym(entry$admin) := "overall") %>%
-  #            ungroup %>% dplyr::select(-any_of("overall"))
-  #          res <- res %>% bind_rows(res.overall) %>% distinct
-  #        }
-  #      }
-  #    }
-  #    return(res)
-  #  })
-  #  ########## Creating the Correlation table ##########
-  #  correlation_tableMap <- reactive({
-  #    req(input$sheetMap,
-  #        input$variableMap)
-  #    # isolate(
-  #      if(input$variableMap != "Distribution"){
-  #        admin_data_col_choice <- input$admin_data_col_choice
-  #        cols <- colnames(tableMap())
-  #        cols <- cols[!cols %in% c(admin_data_col_choice,"num_samples")]
-  #        if(entryMap()$func != "numeric"){
-  #          table <- tableMap() %>%
-  #            mutate_at(cols, ~gsub("%","",.)) %>%
-  #            mutate_at(cols, as.numeric) %>%
-  #            mutate_at(cols, ~round((. * num_samples)/100),0) %>%
-  #            dplyr::select(-num_samples)
-  #        } else{
-  #          table <- tableMap() %>%
-  #            dplyr::select(-num_samples)
-  #        }
-  #      }else{
-  #        admin_data_col_choice <- input$admin_data_col_choice
-  #        table <- data.listMap()[[input$sheetMap]] %>% 
-  #          group_by(!!sym(admin_data_col_choice)) %>% 
-  #          summarise(Submissions = n())
-  #      }
-  #    # )
-  #    return(table)
-  #  })
-  #  
-  #  ########## Category Input ##########
-  # 
-  #    output$categoryMap <- renderUI({
-  #      req(input$adminBnd,
-  #          input$correct_column_one,
-  #          input$variableMap)
-  #      if(input$variableMap != "Distribution"){
-  #        admin_data_col_choice <- input$admin_data_col_choice
-  #        correlation_tableMap <- correlation_tableMap() %>%
-  #          select(-admin_data_col_choice)
-  #        selectInput("category","Category",
-  #                    choices = c(names(correlation_tableMap)),
-  #                    selected = NULL,
-  #                    multiple = F)
-  #      } else {
-  #        selectInput("category","Category",
-  #                    choices = c("Submissions"),
-  #                    selected = NULL,
-  #                    multiple = F)
-  #      }
-  #    })
-  # 
-  # 
-  # 
-  #  
-  #  ########## SHAPEFILES ##########
-  #  
-  #  ########## Admin 0 Shapefile ##########
-  #  admin0_shp <- reactive({
-  #    req(rv$country)
-  #    admin0_files <- file_list %>%
-  #      filter(country == rv$country,
-  #             str_detect(adminBnd, "0")) %>%
-  #      mutate(rurl = str_extract(ServerRelativeUrl, '(?<=_org\\/)(.*?)$')) %>%
-  #      pull(rurl)
-  # 
-  #    for(i in admin0_files){
-  #      rurl <- i
-  #      extension <- str_extract(i, "(?=\\.)(.*?)$")
-  #      if (grepl(sp_con$site$site, rurl)) {
-  #        rurl <- sub(paste0("[\\/]?", sp_con$site$site, "[\\/]?"),
-  #                    "", i)
-  #      }
-  #      rurl = sub("^\\/?", "", rurl)
-  #      url <- file.path(do.call(file.path, sp_con$site), URLencode(rurl))
-  #      destfile  <-  basename(url)
-  # 
-  #      temp_file <- tempfile(fileext = extension, pattern = paste0(rv$country,"_","Admin0"))
-  #      temp_file <- str_remove(temp_file,'(?<=Admin0)(.*?)(?=\\.)')
-  #      if(extension == ".shp"){
-  #        save_name <- temp_file
-  #      }
-  #      response <-  httr::GET(
-  #        url,
-  #        httr::set_cookies(
-  #          rtFa = sp_con$cookies$rtFa,
-  #          FedAuth = sp_con$cookies$FedAuth
-  #        ),
-  #        config = sp_con$config,
-  #        httr::write_disk(temp_file, overwrite = T)
-  #      )
-  #    }
-  # 
-  #    admin0_shp <- st_read(save_name)%>% 
-  #      st_simplify(preserveTopology = T,dTolerance = 1000)
-  #    temp_file <- str_extract(temp_file,paste0('(.*?)(?=',rv$country,')'))
-  #    for (i in list.files(temp_file)){
-  #      if(str_detect(i,"Admin")){
-  #        file <- paste0(temp_file,i)
-  #        file.remove(file)
-  #      }
-  #    }
-  #    return(admin0_shp)
-  #  }) 
-  # 
-  # 
-  #  ########## Admin Shapefile ##########
-  #  admin_shp <- reactive({
-  #    req(rv$country,
-  #        input$adminBnd)
-  #    admin_files <- file_list %>%
-  #      filter(country == rv$country,
-  #             str_detect(adminBnd, input$adminBnd)) %>%
-  #      mutate(rurl = str_extract(ServerRelativeUrl, '(?<=_org\\/)(.*?)$')) %>%
-  #      pull(rurl)
-  # 
-  #    for(i in admin_files){
-  #      rurl <- i
-  #      extension <- str_extract(i, "(?=\\.)(.*?)$")
-  #      if (grepl(sp_con$site$site, rurl)) {
-  #        rurl <- sub(paste0("[\\/]?", sp_con$site$site, "[\\/]?"),
-  #                    "", i)
-  #      }
-  #      rurl = sub("^\\/?", "", rurl)
-  #      url <- file.path(do.call(file.path, sp_con$site), URLencode(rurl))
-  #      destfile  <-  basename(url)
-  # 
-  #      temp_file <- tempfile(fileext = extension, pattern = paste0(rv$country,"_",input$adminBnd))
-  #      temp_file <- str_remove(temp_file,paste0('(?<=',input$adminBnd,')(.*?)(?=\\.)'))
-  #      if(extension == ".shp"){
-  #        save_name <- temp_file
-  #      }
-  #      response <-  httr::GET(
-  #        url,
-  #        httr::set_cookies(
-  #          rtFa = sp_con$cookies$rtFa,
-  #          FedAuth = sp_con$cookies$FedAuth
-  #        ),
-  #        config = sp_con$config,
-  #        httr::write_disk(temp_file, overwrite = T)
-  #      )
-  #    }
-  # 
-  #    admin_shp <- st_read(save_name) 
-  # 
-  #    temp_file <- str_extract(temp_file,paste0('(.*?)(?=',rv$country,')'))
-  #    for (i in list.files(temp_file)){
-  #      if(str_detect(i,"Admin")){
-  #        file <- paste0(temp_file,i)
-  #        file.remove(file)
-  #      }
-  #    }
-  #    return(admin_shp)
-  #  }) 
-  #  
-  #  ########## Regex Pattern Identification ##########
-  #  regex_pattern <- reactive({
-  #    req(rv$country,
-  #        input$adminBnd)
-  #    regex_pattern <- admin_shp() %>%
-  #      as.data.frame() %>%
-  #      mutate(REGEX = paste0(REGEX, "$")) %>% 
-  #      pull(REGEX) %>% unique
-  #    return(regex_pattern)
-  #  }) %>%
-  #    bindCache(c(rv$country,
-  #                input$adminBnd,
-  #                input$variableMap,
-  #                input$sheetMap,
-  #                input$correct_column_one,
-  #                input$admin_data_col_choice,
-  #                input$weightBTNMap))
-  # 
-  #  ########## Zoom Level to Admin 0 ##########
-  #  st_coord_admin_0 <- reactive({
-  #    req(rv$country)
-  #    admin0_shp() %>% st_coordinates() %>% as.data.frame()
-  #  }) %>%
-  #    bindCache(c(rv$country))
-  # 
-  #  
-  #  ########## Join Shapefile and Correlation table ##########
-  #  admin_shp_data <- reactive({
-  #    req(rv$country,
-  #        input$adminBnd,
-  #        input$category,
-  #        input$colorPalette
-  #        )
-  #  isolate(
-  #      admin_data_col_choice <- input$admin_data_col_choice
-  #  )
-  #  isolate(
-  #      correlation_tableMap <- correlation_tableMap() %>%
-  #        select(admin_data_col_choice,input$category)
-  #  )
-  #  isolate(
-  #      merged_data <- merge(admin_shp(), correlation_tableMap, by.x = "ADM_PCODE", by.y = admin_data_col_choice) 
-  #  )
-  # 
-  #    return(merged_data)
-  #      
-  #  })  
-  # 
-  #  ########## Labels ##########
-  #  labels <- reactive({
-  #    req(rv$country,
-  #        input$adminBnd,
-  #        input$variableMap,
-  #        input$category
-  #        )
-  #      labels <- sprintf(
-  #        "<strong>%s</strong><br/> Value: %g",
-  #        admin_shp_data()[["ADM_NAME"]], admin_shp_data()[[input$category]] 
-  #      ) %>% lapply(htmltools::HTML)
-  # 
-  #  }) %>%
-  #    bindCache(c(input$dataInput$datapath,
-  #                input$toolInput$datapath,
-  #                input$adminBnd,
-  #                input$category,
-  #                input$variableMap,
-  #                input$sheetMap,
-  #                input$correct_column_one,
-  #                input$admin_data_col_choice,
-  #                input$weightBTNMap))
-  #  
-  #  ########## Palette ##########
-  #  pal <- reactive({
-  #    req(rv$country,
-  #        input$adminBnd,
-  #        input$variableMap,
-  #        input$category,
-  #        input$colorPalette)
-  #    if(input$colorPalette == "red"){
-  #      palette <-  c(
-  #                    "#f8d6d6",
-  #                    "#f49695",
-  #                    "#ee5a59",
-  #                    "#c0474a",
-  #                    "#792a2e",
-  #                    "#471119")
-  #    }
-  #    if(input$colorPalette == "blue"){
-  #      palette <- c(
-  #        "#b3d5de",
-  #        "#77b2bf",
-  #        "#4096aa",
-  #        "#27768a",
-  #        "#0c596b",
-  #        "#0c3842")
-  #    }
-  #    if(input$colorPalette == "green"){
-  #      palette <- c(
-  #      "#e6f2e0",
-  #      "#b0d3ab",
-  #      "#75c376",
-  #      "#40ab5d",
-  #      "#086d38",
-  #      "#0d4420")
-  #    }
-  #    
-  #    if(input$colorPalette == "brown"){
-  #      palette <- c(
-  #        "#f4f0e8",
-  #        "#d1cab8",
-  #        "#b39c6a",
-  #        "#997e3d",
-  #        "#7f6126",
-  #        "#593d12"
-  #      )
-  #    }
-  #      pal <-  colorNumeric(
-  #        palette = palette,
-  #        domain = admin_shp_data()[[input$category]])
-  # 
-  #      return(pal)
-  #  })  %>%
-  #    bindCache(c(input$dataInput$datapath,
-  #                input$toolInput$datapath,
-  #                input$adminBnd,
-  #                input$category,
-  #                input$variableMap,
-  #                input$sheetMap,
-  #                input$colorPalette,
-  #                input$correct_column_one,
-  #                input$admin_data_col_choice,
-  #                input$weightBTNMap))
-  #  
-  #  ########## Legend title ##########
-  #  legend_title <- reactive({
-  #    req(rv$country,
-  #        input$adminBnd,
-  #        input$category,
-  #        input$variableMap,
-  #        input$colorPalette)
-  #      title <- input$category
-  # 
-  #    if (nchar(title)>20){
-  #      title <- paste(strwrap(title, width =20), collapse = '</br>')
-  #    }
-  #    return(title)
-  #  })  %>%
-  #    bindCache(c(input$dataInput$datapath,
-  #                input$toolInput$datapath,
-  #                input$adminBnd,
-  #                input$category,
-  #                input$variableMap,
-  #                input$sheetMap,
-  #                input$colorPalette,
-  #                input$correct_column_one,
-  #                input$admin_data_col_choice,
-  #                input$weightBTNMap))
-  #   
-  # 
-  #   output$map <- renderUI({
-  #     req(input$adminBnd,
-  #         input$sheetMap,
-  #         input$variableMap, 
-  #         input$category,
-  #         input$correct_column_one,
-  #         input$admin_data_col_choice,
-  #         input$colorPalette)
-  # 
-  #         if(input$weightBTNMap == "yes" & !"weight" %in% colnames(data.listMap()[[input$sheetMap]])){
-  #           HTML("<h4 class = 'title-message' style = 'color: rgba(238, 88, 89, .8)'>Please ensure to have a column named weight in your data</h4>")
-  #         } else {
-  #           if(input$correct_column_one == "yes" & !is.null(input$variableMap)){
-  #             leafletOutput("mapLeaflet", width = "100%", height = "620px")
-  #           }
-  #         }
-  # 
-  #   }) %>%
-  #      bindCache(c(input$dataInput$datapath,
-  #                  input$toolInput$datapath,
-  #                  input$adminBnd,
-  #                  input$category,
-  #                  input$variableMap,
-  #                  input$sheetMap,
-  #                  input$colorPalette,
-  #                  input$correct_column_one,
-  #                  input$admin_data_col_choice,
-  #                  input$weightBTNMap))
-  # 
-  #  map <- reactive({
-  #    req(input$variableMap,
-  #        input$category,
-  #        input$colorPalette)
-  # 
-  #    fill <- input$category
-  # 
-  #    base_map%>%
-  #      leaflet::addPolygons(data = admin_shp(),
-  #                           fillOpacity = 0.8,
-  #                           smoothFactor = 0.5,
-  #                           fillColor = "#aaaaaa",
-  #                           weight = 1,
-  #                           color = "white") %>% 
-  #      leaflet::addPolygons(data = admin_shp_data(),
-  #                           fillOpacity = 0.8,
-  #                           smoothFactor = 0.5,
-  #                           fillColor = ~pal()(admin_shp_data()[[fill]]),
-  #                           # stroke = F,
-  #                           weight = 2,
-  #                           color = "white",
-  #                           dashArray = "3",
-  #                           highlightOptions = highlightOptions(
-  #                             weight = 2,
-  #                             color = "#666",
-  #                             dashArray = "3",
-  #                             fillOpacity = 0.8,
-  #                             bringToFront = F),
-  #                           label = labels(),
-  #                           labelOptions = labelOptions(
-  #                             style = list("font-weight" = "normal", padding = "3px 8px"),
-  #                             textsize = "15px",
-  #                             direction = "auto")
-  #                           ) %>%leaflet::addPolylines(data = admin0_shp(),
-  #                                                                          color = "#111111",
-  #                                                                          fillColor = "transparent",
-  #                                                                          weight = 2,
-  #                                                                          fillOpacity = 0.5,
-  #                                                                          smoothFactor = 1) %>%
-  #      fitBounds(lng1 = min(st_coord_admin_0()$X),
-  #                lat1 = min(st_coord_admin_0()$Y),
-  #                lng2 = max(st_coord_admin_0()$X),
-  #                lat2 = max(st_coord_admin_0()$Y)) %>%
-  #      addLegend("bottomright", pal = pal(), values = admin_shp_data()[[fill]],
-  #                title = legend_title(),
-  #                opacity = 0.7)
-  #    
-  #    
-  #  }) 
-  # 
-  #  
-  #   output$mapLeaflet <-  renderLeaflet({
-  #     req(input$variableMap,
-  #         input$category,
-  #         input$colorPalette)
-  # 
-  #       withProgress(
-  #         message = "Generating Map...",
-  #         value = NULL, {
-  #           map()
-  #         }) 
-  #   }) %>%
-  #     bindCache(c(input$dataInput$datapath,
-  #                 input$toolInput$datapath,
-  #                 input$adminBnd,
-  #                 input$category,
-  #                 input$variableMap,
-  #                 input$sheetMap,
-  #                 input$colorPalette,
-  #                 input$correct_column_one,
-  #                 input$admin_data_col_choice,
-  #                 input$weightBTNMap))
-  # 
-  # 
-  # 
-  # output$downloadBtn <- renderUI({
-  #   req(input$colorPalette)
-  #   div(
-  #       downloadButton("downloadBtnIDPNG","Download PNG"),
-  #       downloadButton("downloadBtnIDHTML","Download Interactive Version")
-  #   )
-  #  })
-  # 
-  # output$downloadBtnIDPNG <-  downloadHandler(
-  # 
-  #           filename = function () {
-  #             paste0(input$variableMap ,"_",input$category, "_", Sys.Date(), ".png")
-  #           }
-  # 
-  #         , content = function(file) {
-  #           withProgress(
-  #             message = "Downloading Map...",
-  #             value = NULL, {
-  #             mapshot(map()%>%
-  #                       fitBounds(lng1 = min(st_coord_admin_0()$X),
-  #                                 lat1 = min(st_coord_admin_0()$Y),
-  #                                 lng2 = max(st_coord_admin_0()$X),
-  #                                 lat2 = max(st_coord_admin_0()$Y))
-  #                  , file = file
-  #                  , cliprect = "viewport"# the clipping rectangle matches the height & width from the viewing port
-  #                  , selfcontained = FALSE # when this was not specified, the function for
-  #             )
-  #          })
-  #      })
-  # output$downloadBtnIDHTML <-  downloadHandler(
-  #     filename = function () {
-  #       paste0(input$variableMap ,"_",input$category, "_", Sys.Date(), ".html")
-  #     }
-  # 
-  #   , content = function(file) {
-  #     withProgress(
-  #       message = "Downloading Map...",
-  #       value = NULL, {
-  #         saveWidget(map()%>%
-  #                   fitBounds(lng1 = min(st_coord_admin_0()$X),
-  #                             lat1 = min(st_coord_admin_0()$Y),
-  #                             lng2 = max(st_coord_admin_0()$X),
-  #                             lat2 = max(st_coord_admin_0()$Y))
-  #                 , file = file)
-  #       })
-  #   })
-  # 
-  # output$weightMap <- renderUI({
-  #   req(input$colorPalette)
-  #   HTML("<h3><strong>Parameters</strong></h3>")
-  #   radioButtons("weightBTNMap","Weighting (only if weight is available in Data)",
-  #                choices = c(No = "no",
-  #                            Yes = "yes"),
-  #                selected = "no")
-  # })
-  
+   output$legend <- renderImage({
+     list(src = "www/legend.png",
+          alt = "Legend", height = '55px', width ='70px')
+   }, deleteFile = F)
+
+   ########## Country map in the Input data page ##########
+   output$country_choice <- renderLeaflet({
+     choose_country_map
+   })
+
+   observeEvent(input$country_choice_shape_click, {
+
+     new_selected <- req(input$country_choice_shape_click)
+
+     isolate(old_selected <- rv$selected)
+
+     if(is.null(old_selected) || ((new_selected$id != old_selected$id) && !is.null(new_selected$id))){
+       if(new_selected$id %in% past$ADMIN){
+         rv$selected <- new_selected
+       } else {
+         rv$selected <- new_selected
+         rv$country <- input$country_choice_shape_click$id
+         country_iso <- ongoing %>%
+           filter(ADMIN == rv$country)
+         leafletProxy("country_choice") %>%
+           clearGroup("selection") %>%
+           addPolygons(data = country_iso,
+                       fillColor = "#EE5859",
+                       fillOpacity = 1,
+                       color = "transparent",
+                       label = ~country_iso$ADMIN,
+                       group = "selection") %>%
+           setView(lng = new_selected$lng, lat = new_selected$lat, zoom = 5)
+       }
+     } else {
+         rv$selected <- NULL
+         leafletProxy("country_choice") %>%
+           clearGroup("selection") %>%
+           setView(lng = 0, lat = 20, zoom = 2)
+     }
+   })
+   ########## Reactive values ##########
+   rv <- reactiveValues()
+   rv$selected <- NULL
+# 
+# 
+   ########## Country Selected Title ##########
+   observeEvent(rv$country,{
+     output$country_title <- renderUI({
+         HTML(paste0("<h4>Country selected: <strong>",rv$country,"</strong></h3>"))
+     })
+   })
+
+   ########## Admin list Boundaries selection ##########
+   admin_list <- reactive({
+     req(rv$country)
+     print(rv$country)
+     print(file_list)
+     adminBnd <- file_list %>%
+       filter(country == rv$country,
+              !str_detect(adminBnd,"0")) %>%
+       arrange(adminBnd) %>%
+       pull(adminBnd) %>% unique
+     return(adminBnd)
+   })
+
+   output$admin_choice <- renderUI({
+     req(rv$country)
+     if(rv$country == "Haiti") {
+       HTML("<h4  style = 'color: rgba(238, 88, 89, .8)'>Unfortunately, we lack proper Admin Shapefiles for Haiti.</h4>")
+     } else {
+       selectizeInput("adminBnd","Admin Boundary Selection",
+                    choices = c("", admin_list()),
+                    multiple = F)
+     }
+   })
+# 
+
+   ########## Getting the Sheet input ##########
+   output$sheetInputMap <- renderUI({
+     req(input$dataInput$datapath,
+         input$toolInput$datapath,
+         input$adminBnd)
+     tool_var <- excel_sheets(input$dataInput$datapath)
+     selectInput("sheetMap","Dataset Sheet Selection",
+                 choices = c(tool_var),
+                 selected = NULL,
+                 multiple = F)
+   })
+
+# 
+# 
+   ########## Getting the Correct Column Input ##########
+
+
+   admin_column <- reactive({
+     req(input$dataInput$datapath,
+         input$toolInput$datapath,
+         input$sheetMap,
+         input$adminBnd)
+     df <- read_excel(input$dataInput$datapath,sheet = input$sheetMap, col_types = "text")
+     tool_var <- tool.survey() %>%
+       filter(q.type %in% c("integer","select_one","select_multiple","decimal") & datasheet == input$sheetMap & name %in% colnames(df)) %>% pull(name) %>% unique
+     if(length(tool_var)>0){
+       pattern <- regex_pattern()
+
+       # Function to check if all values in a column match the regex pattern
+       all_values_match_pattern <- function(column, pattern) {
+         all(grepl(pattern, column))
+       }
+       # Apply the function to each column in the dataframe
+       matching_columns <- df %>%
+         select_if(~all_values_match_pattern(.x, pattern)) %>%
+         names()
+     }else {
+       matching_columns <- "not_matching"
+     }
+
+     return(matching_columns)
+   })
+
+   output$correct_column <- renderUI({
+     req(input$sheetMap)
+     withProgress(
+       message = "Calculating matching columns...",
+       detail = "This may take a moment...",
+       value = NULL, {
+         if(length(admin_column())>1){
+           admin_column <- paste(admin_column(), collapse = ' or ')
+           title <- paste0("Is ",admin_column," the correct column?")
+           radioButtons("correct_column_one", title,
+                        choices = c(No = "no", Yes = "yes"),
+                        selected = character(0))
+         } else if (length(admin_column()) == 0){
+           HTML("<h4  style = 'color: rgba(238, 88, 89, .8)'>Please ensure to have a column in your data matching the PCODE column of the Admin selected</h4>")
+         } else if (admin_column() == "not_matching"){
+           HTML("<h4  style = 'color: rgba(238, 88, 89, .8)'>Please check that the sheet names of the dataset are matching with the tool</h4>")
+         } else {
+           admin_column <- admin_column()
+           title <- paste0("Is ",admin_column," the correct column?")
+           radioButtons("correct_column_one", title,
+                        choices = c(No = "no", Yes = "yes"),
+                        selected = character(0))
+         }
+         # Render the radioButtons once matching_columns is ready
+       }
+     )
+
+   }) %>%
+     bindCache(c(input$dataInput$datapath,
+                 input$toolInput$datapath,
+                 input$adminBnd,
+                 input$sheetMap))
+
+   ########## Strata column if correct column is not correct ##########
+   output$admin_data_col <- renderUI({
+     req(input$sheetMap,
+         input$adminBnd,
+         input$correct_column_one)
+     admin_column <- admin_column()
+     if(input$correct_column_one == "yes"){
+       selectizeInput("admin_data_col_choice","Matching Admin Column in Data",
+                      choices = admin_column,
+                      multiple = F)
+     } else if(length(admin_column) == 0){
+
+     } else{
+       HTML("<h4 style = 'color: rgba(238, 88, 89, .8)'>Please ensure to have a column in your data matching the PCODE column of the Admin selected</h4>")
+     }
+   })%>%
+     bindCache(c(input$dataInput$datapath,
+                 input$toolInput$datapath,
+                 input$adminBnd,
+                 input$sheetMap,
+                 input$correct_column_one))
+
+# 
+   ########## Getting the Variable Input ##########
+
+    output$varMap <- renderUI({
+       req(input$dataInput$datapath,
+           input$toolInput$datapath,
+           input$sheetMap,
+           input$adminBnd,
+           input$admin_data_col_choice,
+           input$correct_column_one)
+       df <- read_excel(input$dataInput$datapath,sheet = input$sheetMap, col_types = "text")
+       empty_columns <- names(df[, colSums(is.na(df) | df == "") == nrow(df)])
+       tool_var <- tool.survey() %>%
+          filter(q.type %in% c("integer","select_one","select_multiple","decimal") & datasheet == input$sheetMap & name %in% colnames(df) & name != input$admin_data_col_choice & !name %in% empty_columns) %>% pull(name) %>% unique
+       if(length(tool_var)>0 & !is.null(input$admin_data_col_choice) & input$correct_column_one  == "yes"){
+         selectizeInput("variableMap","Distribution / Variables",
+                        choices = list(Distribution = "Distribution",Variables =  tool_var),
+                        selected = character(0),
+                        multiple = T,
+                        options = list(maxOptions = 1000L, maxItems = 1))
+       }
+     }) %>%
+     bindCache(c(input$dataInput$datapath,
+                 input$toolInput$datapath,
+                 input$sheetMap,
+                 input$adminBnd,
+                 input$admin_data_col_choice,
+                 input$correct_column_one))
+
+
+
+   ########## Getting the Color Input ##########
+
+   output$color <- renderUI({
+     req(input$adminBnd,
+         input$correct_column_one,
+         input$variableMap,
+         input$category)
+       selectInput("colorPalette", "Color Palette",
+                   choices = list(
+                     REACH = list(Red = "red",
+                                  Blue = "blue",
+                                  Green = "green",
+                                  Brown ="brown"),
+                     IMPACT = list(),
+                     AGORA = list()))
+   })
+
+
+   ########## Getting the entry ##########
+   entryMap <- reactive({
+     req(input$variableMap,
+         input$admin_data_col_choice,
+         input$correct_column_one)
+     admin_data_col_choice <- input$admin_data_col_choice
+     if(input$variableMap != "Distribution"){
+       entry <- list()
+       entry$variable <- input$variableMap
+       not_in_tool <- input$variableMap[!input$variableMap %in% tool.survey()$name]
+       if (any(str_detect(input$variableMap, "/"))) input$variableMap <- str_split(input$variableMap, "/", 2, T)[,1]
+       res <- data.frame(name = input$variableMap) %>%
+         left_join(dplyr::select(tool.survey(), name, !!sym(label_colname())), by = "name", na_matches = "never") %>%
+         pull(label_colname())
+       if(is.na(res)){
+         entry$label <- "No label"
+       } else{
+         entry$label <- res
+       }
+       entry$disaggregate.variables <- NA
+       entry$disaggregations <- NA
+
+       if (is.na(input$calculation)){
+         entry$calculation <- NA
+       } else{
+         entry$calculation <- input$calculation
+       }
+       entry$func <- tool.survey() %>%
+         filter(name == input$variableMap) %>% pull(q.type)
+
+       if(entry$func %in% c("calculate","integer","decimal")) entry$func <- "numeric"
+
+       entry$var_type <- input$func
+       entry$admin <- admin_data_col_choice
+       entry$list_name <- tool.survey() %>%
+         filter(name == input$variableMap) %>% pull(list_name)
+       entry$comments <- ''
+       entry$datasheet<- tool.survey() %>%
+         filter(name == input$variableMap) %>% pull(datasheet)
+       if (input$calculation == "include_na"){
+         entry$omit_na <- F
+       } else{
+         entry$omit_na <- T
+       }
+       if (input$calculation == "add_total"){
+         entry$add_total <- T
+       } else{
+         entry$add_total <- F
+       }
+     }
+     return(entry)
+   })
+   ########## Getting the Data List ##########
+   data.listMap <- reactive({
+     req(input$dataInput$datapath,
+         input$weightBTNMap,
+         input$variableMap)
+     tool.survey <- tool.survey()
+     sheet_names <- excel_sheets(input$dataInput$datapath)
+     sheet_names[1] <- "main"
+     data.list <- list("main" = read_excel(input$dataInput$datapath, sheet=1, col_types = "text"))
+     for(sheet in sheet_names[-1])
+       data.list[[sheet]] <- read_excel(input$dataInput$datapath, sheet=sheet, col_types = "text")
+     tool_datasheets <- tool.survey %>% distinct(datasheet) %>% filter(!is.na(.)) %>% pull
+     for (sheet in sheet_names[-1]) {
+       # take the first column from this sheet and find it in tool.survey
+       i <- 1
+       data_cnames <- data.list[[sheet]] %>% dplyr::select(-contains("/"), -starts_with("_")) %>% names
+       first_col <- data_cnames[i]
+       while (!first_col %in% tool.survey()$name) {
+         i <- i + 1
+         first_col <- data_cnames[i]
+       }
+       old_sheetname <- tool.survey %>% filter(name == first_col) %>% pull(datasheet)
+       # change all occurences of `old_sheetname` to `sheet`
+       tool.survey <- tool.survey %>% mutate(datasheet = ifelse(datasheet %==na% old_sheetname, sheet, datasheet))
+     }
+     for (sheet in names(data.list)){
+       if(input$weightBTNMap == "no") {
+         data.list[[sheet]] <- data.list[[sheet]] %>%
+           mutate(overall = "overall",
+                  weight = 1)
+       } else if (input$weightBTNMap == "yes" & "weight" %in% colnames(data.list[[sheet]])){
+         data.list[[sheet]] <- data.list[[sheet]] %>%
+           mutate(overall = "overall",
+                  weight = as.numeric(weight))
+
+       } else{
+         data.list[[sheet]] <- data.list[[sheet]] %>%
+           mutate(overall = "overall",
+                  weight = 1)
+       }
+     }
+     tryCatch(
+       return(data.list), error = function(err) return(data.frame())
+     )
+   })
+   ########## Creating the Srvyr Design List ##########
+   srvyr.designsMap <- reactive({
+     req(input$sheetMap,
+         input$variableMap,
+         input$admin_data_col_choice,
+         input$weightBTNMap,
+         input$correct_column_one)
+     if(input$variableMap != "Distribution"){
+       data.list <- data.listMap()
+       srvyr.designs <- list()
+       entry <- entryMap()
+       tool.survey <- tool.survey()
+       tool.choices <- tool.choices()
+       sheet <- input$sheetMap
+       col <- input$variableMap
+       disag.col <- input$admin_data_col_choice
+       if(!all(is.na(entry$disaggregate.variables))){
+         for(disagg.var in entry$disaggregate.variables){
+           if(!disagg.var %in% colnames(data.list[[sheet]])){
+             # disagg.var was not found, but maybe it's located in main? let's try to fix!
+             if(sheet == "main") stop("Disaggregation variable ", disagg.var, " was not found in main!!\n")
+             if(disagg.var %in% colnames(data.list$main)){
+               # cat("... Disaggregation variable", disagg.var,"was not found in sheet",sheet,"but it exists in main. Will attempt to simply left_join by uuid... ")
+               join_attempt <- data.list()$main %>% dplyr::select(uuid, !!sym(disagg.var))
+               data.list[[sheet]] <- data.list[[sheet]] %>% left_join(join_attempt, by = "uuid")
+               # cat(" success!")
+             }else stop(paste("Disaggregation variable", disagg.var, "not found in sheet",sheet,"nor in main!!\n"))
+           }
+           data.list[[sheet]][[disagg.var]] <- as.character(data.list[[sheet]][[disagg.var]])  # as character, not factor!
+         }
+       }
+       if(entry$func == "select_multiple"){
+         # not converting to label here. instead just replace "/" with "___" and convert to numeric
+         choice_cols <- colnames(data.list[[sheet]])[colnames(data.list[[sheet]]) %>% str_starts(paste0(col, "/"))]
+         data.list[[sheet]] <- data.list[[sheet]] %>%
+           mutate(across(all_of(choice_cols), as.numeric)) %>%
+           rename_with(~str_replace(., "/", "___"), choice_cols)
+         if(!entry$omit_na){
+           # change NAs from all other choice columns to 0
+           data.list[[sheet]] <- data.list[[sheet]] %>%
+             mutate(across(starts_with(paste0(col,"___")), ~replace_na(., 0)))
+           # create a new NA column
+           na_colname <- paste0(col,"___NA")
+           data.list[[sheet]][[na_colname]] <- is.na(data.list[[sheet]][[col]]) %>% as.numeric
+           data.list[[sheet]] <- data.list[[sheet]] %>% relocate(all_of(na_colname), .after = !!sym(col))
+         }
+       }else {
+         if(entry$func == "select_one") {
+           # try to convert to label:
+           choice_names <- tool.choices %>% filter(list_name == entry$list_name) %>% pull(name)
+           not_in_choices <- data.list[[sheet]] %>% filter(!(!!sym(col) %in% choice_names) & !isna(!!sym(col))) %>%
+             pull(!!sym(col)) %>% unique
+           if(length(not_in_choices) > 0){
+             conv_vec <- data.list[[sheet]][[col]]
+           }else{
+             if(!entry$list_name %in% tool.choices$list_name) stop(paste("list",entry$list_name, "not found in tool.choices!"))
+
+             res <- data.frame(name = unlist(data.list[[sheet]][[col]])) %>%
+               left_join(dplyr::select(tool.choices, name, list_name, label_colname()) %>% filter(list_name == entry$list_name),
+                         by = "name", na_matches = "never")
+             if(nrow(res) == 0) stop("All choices not in the list!")
+
+             conv_vec <- pull(res, label_colname())
+           }
+           if(entry$omit_na) {
+             data.list[[sheet]][[col]] <- factor(conv_vec, exclude = NA)
+           }else{
+             data.list[[sheet]][[col]] <- factor(conv_vec, exclude = NULL)
+           }
+           rm(conv_vec, choice_names, not_in_choices)
+         }
+         else if(entry$func %in% c("mean", "median", "integer", "numeric","decimal")) data.list[[sheet]][[col]] <- as.numeric(data.list[[sheet]][[col]])
+       }
+       ## Deal with disaggregated change to Label
+       survey_data <- data.list[[sheet]]
+       srvyr.designs[[sheet]] <- as_survey_design(survey_data, weights = weight)
+     }
+     return(srvyr.designs)
+   })
+   ########## Creating the table ##########
+   tableMap <- reactive({
+     req(input$sheetMap,
+         input$variableMap,
+         input$weightBTNMap)
+     if(input$variableMap != "Distribution"){
+       entry <- entryMap()
+       tool.choices <- tool.choices()
+       label_colname <- label_colname()
+       srvyr.design <- srvyr.designsMap()
+       if(entry$omit_na) srvyr.design[[input$sheetMap]] <- srvyr.design[[input$sheetMap]] %>% filter(!is.na(!!sym(input$variableMap)))
+       srvyr.design[[input$sheetMap]]  <- srvyr.design[[input$sheetMap]] %>% group_by(!!sym(entry$admin))
+       for (disagg.var in entry$disaggregate.variables) {
+         res <- make_table(srvyr.design[[input$sheetMap]],tool.choices = tool.choices, label_colname = label_colname, entry, disagg.var) %>% ungroup %>% dplyr::select(-any_of("overall"))
+         # add overall
+         if(entry$admin != "overall"){
+           entry.ovrl <- entry
+           entry.ovrl$admin <- "overall"
+           if(!"overall" %in% (srvyr.design[[input$sheetMap]] %>% variable.names)) srvyr.design[[input$sheetMap]] <- srvyr.design[[input$sheetMap]] %>% mutate(overall = "overall")
+           res.overall <- make_table(srvyr.design[[input$sheetMap]] %>% ungroup %>% group_by(overall),tool.choices = tool.choices, label_colname = label_colname,
+                                     entry.ovrl, disagg.var)  %>%
+             mutate(!!sym(entry$admin) := "overall") %>%
+             ungroup %>% dplyr::select(-any_of("overall"))
+           res <- res %>% bind_rows(res.overall) %>% distinct
+         }
+       }
+     }
+     return(res)
+   })
+   ########## Creating the Correlation table ##########
+   correlation_tableMap <- reactive({
+     req(input$sheetMap,
+         input$variableMap)
+     # isolate(
+       if(input$variableMap != "Distribution"){
+         admin_data_col_choice <- input$admin_data_col_choice
+         cols <- colnames(tableMap())
+         cols <- cols[!cols %in% c(admin_data_col_choice,"num_samples")]
+         if(entryMap()$func != "numeric"){
+           table <- tableMap() %>%
+             mutate_at(cols, ~gsub("%","",.)) %>%
+             mutate_at(cols, as.numeric) %>%
+             mutate_at(cols, ~round((. * num_samples)/100),0) %>%
+             dplyr::select(-num_samples)
+         } else{
+           table <- tableMap() %>%
+             dplyr::select(-num_samples)
+         }
+       }else{
+         admin_data_col_choice <- input$admin_data_col_choice
+         table <- data.listMap()[[input$sheetMap]] %>%
+           group_by(!!sym(admin_data_col_choice)) %>%
+           summarise(Submissions = n())
+       }
+     # )
+     return(table)
+   })
+
+   ########## Category Input ##########
+
+     output$categoryMap <- renderUI({
+       req(input$adminBnd,
+           input$correct_column_one,
+           input$variableMap)
+       if(input$variableMap != "Distribution"){
+         admin_data_col_choice <- input$admin_data_col_choice
+         correlation_tableMap <- correlation_tableMap() %>%
+           select(-admin_data_col_choice)
+         selectInput("category","Category",
+                     choices = c(names(correlation_tableMap)),
+                     selected = NULL,
+                     multiple = F)
+       } else {
+         selectInput("category","Category",
+                     choices = c("Submissions"),
+                     selected = NULL,
+                     multiple = F)
+       }
+     })
+
+
+
+
+   ########## SHAPEFILES ##########
+
+   ########## Admin 0 Shapefile ##########
+   admin0_shp <- reactive({
+     req(rv$country)
+     admin0_files <- file_list %>%
+       filter(country == rv$country,
+              str_detect(adminBnd, "0")) %>%
+       mutate(rurl = str_extract(ServerRelativeUrl, '(?<=_org\\/)(.*?)$')) %>%
+       pull(rurl)
+
+     for(i in admin0_files){
+       rurl <- i
+       extension <- str_extract(i, "(?=\\.)(.*?)$")
+       if (grepl(sp_con$site$site, rurl)) {
+         rurl <- sub(paste0("[\\/]?", sp_con$site$site, "[\\/]?"),
+                     "", i)
+       }
+       rurl = sub("^\\/?", "", rurl)
+       url <- file.path(do.call(file.path, sp_con$site), URLencode(rurl))
+       destfile  <-  basename(url)
+
+       temp_file <- tempfile(fileext = extension, pattern = paste0(rv$country,"_","Admin0"))
+       temp_file <- str_remove(temp_file,'(?<=Admin0)(.*?)(?=\\.)')
+       if(extension == ".shp"){
+         save_name <- temp_file
+       }
+       response <-  httr::GET(
+         url,
+         httr::set_cookies(
+           rtFa = sp_con$cookies$rtFa,
+           FedAuth = sp_con$cookies$FedAuth
+         ),
+         config = sp_con$config,
+         httr::write_disk(temp_file, overwrite = T)
+       )
+     }
+
+     admin0_shp <- st_read(save_name)%>%
+       st_simplify(preserveTopology = T,dTolerance = 1000)
+     temp_file <- str_extract(temp_file,paste0('(.*?)(?=',rv$country,')'))
+     for (i in list.files(temp_file)){
+       if(str_detect(i,"Admin")){
+         file <- paste0(temp_file,i)
+         file.remove(file)
+       }
+     }
+     return(admin0_shp)
+   })
+
+
+   ########## Admin Shapefile ##########
+   admin_shp <- reactive({
+     req(rv$country,
+         input$adminBnd)
+     admin_files <- file_list %>%
+       filter(country == rv$country,
+              str_detect(adminBnd, input$adminBnd)) %>%
+       mutate(rurl = str_extract(ServerRelativeUrl, '(?<=_org\\/)(.*?)$')) %>%
+       pull(rurl)
+
+     for(i in admin_files){
+       rurl <- i
+       extension <- str_extract(i, "(?=\\.)(.*?)$")
+       if (grepl(sp_con$site$site, rurl)) {
+         rurl <- sub(paste0("[\\/]?", sp_con$site$site, "[\\/]?"),
+                     "", i)
+       }
+       rurl = sub("^\\/?", "", rurl)
+       url <- file.path(do.call(file.path, sp_con$site), URLencode(rurl))
+       destfile  <-  basename(url)
+
+       temp_file <- tempfile(fileext = extension, pattern = paste0(rv$country,"_",input$adminBnd))
+       temp_file <- str_remove(temp_file,paste0('(?<=',input$adminBnd,')(.*?)(?=\\.)'))
+       if(extension == ".shp"){
+         save_name <- temp_file
+       }
+       response <-  httr::GET(
+         url,
+         httr::set_cookies(
+           rtFa = sp_con$cookies$rtFa,
+           FedAuth = sp_con$cookies$FedAuth
+         ),
+         config = sp_con$config,
+         httr::write_disk(temp_file, overwrite = T)
+       )
+     }
+
+     admin_shp <- st_read(save_name)
+
+     temp_file <- str_extract(temp_file,paste0('(.*?)(?=',rv$country,')'))
+     for (i in list.files(temp_file)){
+       if(str_detect(i,"Admin")){
+         file <- paste0(temp_file,i)
+         file.remove(file)
+       }
+     }
+     return(admin_shp)
+   })
+# 
+   ########## Regex Pattern Identification ##########
+   regex_pattern <- reactive({
+     req(rv$country,
+         input$adminBnd)
+     regex_pattern <- admin_shp() %>%
+       as.data.frame() %>%
+       mutate(REGEX = paste0(REGEX, "$")) %>%
+       pull(REGEX) %>% unique
+     return(regex_pattern)
+   }) %>%
+     bindCache(c(rv$country,
+                 input$adminBnd,
+                 input$variableMap,
+                 input$sheetMap,
+                 input$correct_column_one,
+                 input$admin_data_col_choice,
+                 input$weightBTNMap))
+
+   ########## Zoom Level to Admin 0 ##########
+   st_coord_admin_0 <- reactive({
+     req(rv$country)
+     admin0_shp() %>% st_coordinates() %>% as.data.frame()
+   }) %>%
+     bindCache(c(rv$country))
+# 
+
+   ########## Join Shapefile and Correlation table ##########
+   admin_shp_data <- reactive({
+     req(rv$country,
+         input$adminBnd,
+         input$category,
+         input$colorPalette
+         )
+   isolate(
+       admin_data_col_choice <- input$admin_data_col_choice
+   )
+   isolate(
+       correlation_tableMap <- correlation_tableMap() %>%
+         select(admin_data_col_choice,input$category)
+   )
+   isolate(
+       merged_data <- merge(admin_shp(), correlation_tableMap, by.x = "ADM_PCODE", by.y = admin_data_col_choice)
+   )
+
+     return(merged_data)
+
+   })
+
+   ########## Labels ##########
+   labels <- reactive({
+     req(rv$country,
+         input$adminBnd,
+         input$variableMap,
+         input$category
+         )
+       labels <- sprintf(
+         "<strong>%s</strong><br/> Value: %g",
+         admin_shp_data()[["ADM_NAME"]], admin_shp_data()[[input$category]]
+       ) %>% lapply(htmltools::HTML)
+
+   }) %>%
+     bindCache(c(input$dataInput$datapath,
+                 input$toolInput$datapath,
+                 input$adminBnd,
+                 input$category,
+                 input$variableMap,
+                 input$sheetMap,
+                 input$correct_column_one,
+                 input$admin_data_col_choice,
+                 input$weightBTNMap))
+
+   ########## Palette ##########
+   pal <- reactive({
+     req(rv$country,
+         input$adminBnd,
+         input$variableMap,
+         input$category,
+         input$colorPalette)
+     if(input$colorPalette == "red"){
+       palette <-  c(
+                     "#f8d6d6",
+                     "#f49695",
+                     "#ee5a59",
+                     "#c0474a",
+                     "#792a2e",
+                     "#471119")
+     }
+     if(input$colorPalette == "blue"){
+       palette <- c(
+         "#b3d5de",
+         "#77b2bf",
+         "#4096aa",
+         "#27768a",
+         "#0c596b",
+         "#0c3842")
+     }
+     if(input$colorPalette == "green"){
+       palette <- c(
+       "#e6f2e0",
+       "#b0d3ab",
+       "#75c376",
+       "#40ab5d",
+       "#086d38",
+       "#0d4420")
+     }
+
+     if(input$colorPalette == "brown"){
+       palette <- c(
+         "#f4f0e8",
+         "#d1cab8",
+         "#b39c6a",
+         "#997e3d",
+         "#7f6126",
+         "#593d12"
+       )
+     }
+       pal <-  colorNumeric(
+         palette = palette,
+         domain = admin_shp_data()[[input$category]])
+
+       return(pal)
+   })  %>%
+     bindCache(c(input$dataInput$datapath,
+                 input$toolInput$datapath,
+                 input$adminBnd,
+                 input$category,
+                 input$variableMap,
+                 input$sheetMap,
+                 input$colorPalette,
+                 input$correct_column_one,
+                 input$admin_data_col_choice,
+                 input$weightBTNMap))
+
+   ########## Legend title ##########
+   legend_title <- reactive({
+     req(rv$country,
+         input$adminBnd,
+         input$category,
+         input$variableMap,
+         input$colorPalette)
+       title <- input$category
+
+     if (nchar(title)>20){
+       title <- paste(strwrap(title, width =20), collapse = '</br>')
+     }
+     return(title)
+   })  %>%
+     bindCache(c(input$dataInput$datapath,
+                 input$toolInput$datapath,
+                 input$adminBnd,
+                 input$category,
+                 input$variableMap,
+                 input$sheetMap,
+                 input$colorPalette,
+                 input$correct_column_one,
+                 input$admin_data_col_choice,
+                 input$weightBTNMap))
+
+
+    output$map <- renderUI({
+      req(input$adminBnd,
+          input$sheetMap,
+          input$variableMap,
+          input$category,
+          input$correct_column_one,
+          input$admin_data_col_choice,
+          input$colorPalette)
+
+          if(input$weightBTNMap == "yes" & !"weight" %in% colnames(data.listMap()[[input$sheetMap]])){
+            HTML("<h4 class = 'title-message' style = 'color: rgba(238, 88, 89, .8)'>Please ensure to have a column named weight in your data</h4>")
+          } else {
+            if(input$correct_column_one == "yes" & !is.null(input$variableMap)){
+              leafletOutput("mapLeaflet", width = "100%", height = "620px")
+            }
+          }
+
+    }) %>%
+       bindCache(c(input$dataInput$datapath,
+                   input$toolInput$datapath,
+                   input$adminBnd,
+                   input$category,
+                   input$variableMap,
+                   input$sheetMap,
+                   input$colorPalette,
+                   input$correct_column_one,
+                   input$admin_data_col_choice,
+                   input$weightBTNMap))
+
+   map <- reactive({
+     req(input$variableMap,
+         input$category,
+         input$colorPalette)
+
+     fill <- input$category
+
+     base_map%>%
+       leaflet::addPolygons(data = admin_shp(),
+                            fillOpacity = 0.8,
+                            smoothFactor = 0.5,
+                            fillColor = "#aaaaaa",
+                            weight = 1,
+                            color = "white") %>%
+       leaflet::addPolygons(data = admin_shp_data(),
+                            fillOpacity = 0.8,
+                            smoothFactor = 0.5,
+                            fillColor = ~pal()(admin_shp_data()[[fill]]),
+                            # stroke = F,
+                            weight = 2,
+                            color = "white",
+                            dashArray = "3",
+                            highlightOptions = highlightOptions(
+                              weight = 2,
+                              color = "#666",
+                              dashArray = "3",
+                              fillOpacity = 0.8,
+                              bringToFront = F),
+                            label = labels(),
+                            labelOptions = labelOptions(
+                              style = list("font-weight" = "normal", padding = "3px 8px"),
+                              textsize = "15px",
+                              direction = "auto")
+                            ) %>%leaflet::addPolylines(data = admin0_shp(),
+                                                                           color = "#111111",
+                                                                           fillColor = "transparent",
+                                                                           weight = 2,
+                                                                           fillOpacity = 0.5,
+                                                                           smoothFactor = 1) %>%
+       fitBounds(lng1 = min(st_coord_admin_0()$X),
+                 lat1 = min(st_coord_admin_0()$Y),
+                 lng2 = max(st_coord_admin_0()$X),
+                 lat2 = max(st_coord_admin_0()$Y)) %>%
+       addLegend("bottomright", pal = pal(), values = admin_shp_data()[[fill]],
+                 title = legend_title(),
+                 opacity = 0.7)
+
+
+   })
+
+
+    output$mapLeaflet <-  renderLeaflet({
+      req(input$variableMap,
+          input$category,
+          input$colorPalette)
+
+        withProgress(
+          message = "Generating Map...",
+          value = NULL, {
+            map()
+          })
+    }) %>%
+      bindCache(c(input$dataInput$datapath,
+                  input$toolInput$datapath,
+                  input$adminBnd,
+                  input$category,
+                  input$variableMap,
+                  input$sheetMap,
+                  input$colorPalette,
+                  input$correct_column_one,
+                  input$admin_data_col_choice,
+                  input$weightBTNMap))
+
+
+
+  output$downloadBtn <- renderUI({
+    req(input$colorPalette)
+    div(
+        downloadButton("downloadBtnIDPNG","Download PNG"),
+        downloadButton("downloadBtnIDHTML","Download Interactive Version")
+    )
+   })
+
+  output$downloadBtnIDPNG <-  downloadHandler(
+
+            filename = function () {
+              paste0(input$variableMap ,"_",input$category, "_", Sys.Date(), ".png")
+            }
+
+          , content = function(file) {
+            withProgress(
+              message = "Downloading Map...",
+              value = NULL, {
+              mapshot(map()%>%
+                        fitBounds(lng1 = min(st_coord_admin_0()$X),
+                                  lat1 = min(st_coord_admin_0()$Y),
+                                  lng2 = max(st_coord_admin_0()$X),
+                                  lat2 = max(st_coord_admin_0()$Y))
+                   , file = file
+                   , cliprect = "viewport"# the clipping rectangle matches the height & width from the viewing port
+                   , selfcontained = FALSE # when this was not specified, the function for
+              )
+           })
+       })
+  output$downloadBtnIDHTML <-  downloadHandler(
+      filename = function () {
+        paste0(input$variableMap ,"_",input$category, "_", Sys.Date(), ".html")
+      }
+
+    , content = function(file) {
+      withProgress(
+        message = "Downloading Map...",
+        value = NULL, {
+          saveWidget(map()%>%
+                    fitBounds(lng1 = min(st_coord_admin_0()$X),
+                              lat1 = min(st_coord_admin_0()$Y),
+                              lng2 = max(st_coord_admin_0()$X),
+                              lat2 = max(st_coord_admin_0()$Y))
+                  , file = file)
+        })
+    })
+
+  output$weightMap <- renderUI({
+    HTML("<h3><strong>Parameters</strong></h3>")
+    radioButtons("weightBTNMap","Weighting (only if weight is available in Data)",
+                 choices = c(No = "no",
+                             Yes = "yes"),
+                 selected = "no")
+  })
+
 }
 #### FIX isolating errors
 

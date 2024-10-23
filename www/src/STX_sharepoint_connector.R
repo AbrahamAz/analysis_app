@@ -1,17 +1,21 @@
 
-sp_con <-
-  sp_connection(
-    site = 'https://acted-my.sharepoint.com/personal/nestor_cheryba_reach-initiative_org',
-    username = 'nestor.cheryba@reach-initiative.org',
-    password = "Par1s1sBurning",
-    get_config = T
-  )
+od = get_business_onedrive()
+file_list = od$list_items("Documents/Shapefiles")%>% 
+  mutate(country = str_extract(name, '(.*?)(?=\\_)'),
+         adminBnd = str_extract(name, '(?<=\\_)(.*?)(?=\\.)'))
 
-file_list <- sp_list_contents(sp_con, 'Documents/Analysis tool') %>% 
-  as.data.frame() %>% 
-  filter(Type == 'File') %>% 
-  mutate(country = str_extract(Name, '(.*?)(?=\\_)'),
-         adminBnd = str_extract(Name, '(?<=\\_)(.*?)(?=\\.)'))
+# sp_con <-
+#   sp_connection(
+#     Address  = 'https://acted-my.sharepoint.com/personal/nestor_cheryba@reach-initiative.org',
+#     Username  = 'nestor.cheryba@reach-initiative.org',
+#     Password  = "Par1s1sBurning"
+#   )
+# 
+# file_list <- sp_list_contents(sp_con, 'Documents/Analysis tool') %>% 
+#   as.data.frame() %>% 
+#   filter(Type == 'File') %>% 
+#   mutate(country = str_extract(Name, '(.*?)(?=\\_)'),
+#          adminBnd = str_extract(Name, '(?<=\\_)(.*?)(?=\\.)'))
 
 countries <-  file_list %>%
   arrange(country) %>%
