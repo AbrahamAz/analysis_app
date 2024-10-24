@@ -1,6 +1,6 @@
 
 od = get_business_onedrive()
-file_list = od$list_items("Documents/Shapefiles")%>% 
+file_list <- od$list_items("Documents/Shapefiles")%>% 
   mutate(country = str_extract(name, '(.*?)(?=\\_)'),
          adminBnd = str_extract(name, '(?<=\\_)(.*?)(?=\\.)'))
 
@@ -21,8 +21,7 @@ countries <-  file_list %>%
   arrange(country) %>%
   pull(country) %>% unique()
 
-# 
-# 
+
 # file_list <- file_list %>%
 #   # filter(str_detect(adminBnd, "0")) %>%
 #   mutate(rurl = str_extract(ServerRelativeUrl, '(?<=_org\\/)(.*?)$')) %>%

@@ -184,7 +184,7 @@ ui <- fluidPage(
                              # p("Then you will be able to select between showing the geographical distribution of your submission by selecting [Distribution], or you can select through the different variables of your data and respectively select between the categories of the selected variable to show their distribution over the selected admin."),
                              h3(class = "title-message","Requirements"),
                              h4(style = "font-size:20px;",strong("Singular Table/Graph Output")),
-                             p("The Data downloaded should be of an Excel format. If the dataset is only including one tab (no loops included in the data), the sheet should be named ", strong('main.'),"If the Data include many tabs (Data with loops), please ensure that the first tab is named ", strong('main,'),"and then the others kept as downloaded from the Kobo Server (as named by the name value of the respective begin_repeat row)."),
+                             p("The Data downloaded should be of an Excel format. The dataset should include the all the sheets that usually are included once downloaded from Kobo Server."),
                              p("The tool should include the survey and the choices tab."),
                              p("For the weighting to be captured and calculated, the data should include a column named ",strong("weight."),"Please make sure that in case data is consiting of loops as well, weight column should also be included in every tab."),
                              p("For the strata to be captured and calculated, the data should include a column named ", strong("strata."),"Please make sure that in case data is consiting of loops as well, strata column should also be included in every tab."),
@@ -2682,8 +2682,9 @@ server <- function(input, output, session) {
          input$variableMap)
      tool.survey <- tool.survey()
      sheet_names <- excel_sheets(input$dataInput$datapath)
-     sheet_names[1] <- "main"
-     data.list <- list("main" = read_excel(input$dataInput$datapath, sheet=1, col_types = "text"))
+     sheet_name <- sheet_names[1]
+     data.list <- list(read_excel(input$dataInput$datapath, sheet=1, col_types = "text"))
+     names(data.list)[1] <- sheet_name
      for(sheet in sheet_names[-1])
        data.list[[sheet]] <- read_excel(input$dataInput$datapath, sheet=sheet, col_types = "text")
      tool_datasheets <- tool.survey %>% distinct(datasheet) %>% filter(!is.na(.)) %>% pull
@@ -2890,38 +2891,22 @@ server <- function(input, output, session) {
      admin0_files <- file_list %>%
        filter(country == rv$country,
               str_detect(adminBnd, "0")) %>%
-       mutate(rurl = str_extract(ServerRelativeUrl, '(?<=_org\\/)(.*?)$')) %>%
-       pull(rurl)
-
-     for(i in admin0_files){
-       rurl <- i
+       pull(name)
+     
+     for(i in admin_files){
        extension <- str_extract(i, "(?=\\.)(.*?)$")
-       if (grepl(sp_con$site$site, rurl)) {
-         rurl <- sub(paste0("[\\/]?", sp_con$site$site, "[\\/]?"),
-                     "", i)
-       }
-       rurl = sub("^\\/?", "", rurl)
-       url <- file.path(do.call(file.path, sp_con$site), URLencode(rurl))
-       destfile  <-  basename(url)
-
        temp_file <- tempfile(fileext = extension, pattern = paste0(rv$country,"_","Admin0"))
-       temp_file <- str_remove(temp_file,'(?<=Admin0)(.*?)(?=\\.)')
+       temp_file <- str_remove(temp_file,paste0('(?<=Admin0)(.*?)(?=\\.)'))
        if(extension == ".shp"){
          save_name <- temp_file
        }
-       response <-  httr::GET(
-         url,
-         httr::set_cookies(
-           rtFa = sp_con$cookies$rtFa,
-           FedAuth = sp_con$cookies$FedAuth
-         ),
-         config = sp_con$config,
-         httr::write_disk(temp_file, overwrite = T)
-       )
+       a <- od$download_file(paste0("Documents/Shapefiles/",i), dest = temp_file, overwrite = T)
      }
-
+     
+     # a <- od$download_file(paste0("Documents\\Shapefiles\\",save_name), dest = tempfile, overwrite = T)
      admin0_shp <- st_read(save_name)%>%
        st_simplify(preserveTopology = T,dTolerance = 1000)
+     
      temp_file <- str_extract(temp_file,paste0('(.*?)(?=',rv$country,')'))
      for (i in list.files(temp_file)){
        if(str_detect(i,"Admin")){
@@ -2939,37 +2924,20 @@ server <- function(input, output, session) {
          input$adminBnd)
      admin_files <- file_list %>%
        filter(country == rv$country,
-              str_detect(adminBnd, input$adminBnd)) %>%
-       mutate(rurl = str_extract(ServerRelativeUrl, '(?<=_org\\/)(.*?)$')) %>%
-       pull(rurl)
-
+              str_detect(adminBnd, input$adminBnd))  %>%
+       pull(name)
+     
      for(i in admin_files){
-       rurl <- i
        extension <- str_extract(i, "(?=\\.)(.*?)$")
-       if (grepl(sp_con$site$site, rurl)) {
-         rurl <- sub(paste0("[\\/]?", sp_con$site$site, "[\\/]?"),
-                     "", i)
-       }
-       rurl = sub("^\\/?", "", rurl)
-       url <- file.path(do.call(file.path, sp_con$site), URLencode(rurl))
-       destfile  <-  basename(url)
-
        temp_file <- tempfile(fileext = extension, pattern = paste0(rv$country,"_",input$adminBnd))
        temp_file <- str_remove(temp_file,paste0('(?<=',input$adminBnd,')(.*?)(?=\\.)'))
        if(extension == ".shp"){
          save_name <- temp_file
        }
-       response <-  httr::GET(
-         url,
-         httr::set_cookies(
-           rtFa = sp_con$cookies$rtFa,
-           FedAuth = sp_con$cookies$FedAuth
-         ),
-         config = sp_con$config,
-         httr::write_disk(temp_file, overwrite = T)
-       )
+       a <- od$download_file(paste0("Documents/Shapefiles/",i), dest = temp_file, overwrite = T)
      }
-
+     
+     # a <- od$download_file(paste0("Documents\\Shapefiles\\",save_name), dest = tempfile, overwrite = T)
      admin_shp <- st_read(save_name)
 
      temp_file <- str_extract(temp_file,paste0('(.*?)(?=',rv$country,')'))
@@ -3000,13 +2968,15 @@ server <- function(input, output, session) {
                  input$admin_data_col_choice,
                  input$weightBTNMap))
 
-   ########## Zoom Level to Admin 0 ##########
-   st_coord_admin_0 <- reactive({
-     req(rv$country)
-     admin0_shp() %>% st_coordinates() %>% as.data.frame()
-   }) %>%
-     bindCache(c(rv$country))
-# 
+########## Zoom Level to Admin 0 ##########
+st_coord_admin_0 <- reactive({
+  req(rv$country)
+  admin0_shp() %>%
+    st_coordinates() %>%
+    as.data.frame()
+}) %>%
+  bindCache(c(rv$country))
+
 
    ########## Join Shapefile and Correlation table ##########
    admin_shp_data <- reactive({
@@ -3203,7 +3173,8 @@ server <- function(input, output, session) {
                               style = list("font-weight" = "normal", padding = "3px 8px"),
                               textsize = "15px",
                               direction = "auto")
-                            ) %>%leaflet::addPolylines(data = admin0_shp(),
+                            ) %>% 
+     leaflet::addPolylines(data = admin0_shp(),
                                                                            color = "#111111",
                                                                            fillColor = "transparent",
                                                                            weight = 2,
