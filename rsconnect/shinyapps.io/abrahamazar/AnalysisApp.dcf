@@ -1,0 +1,13 @@
+name: AnalysisApp
+title: AnalysisApp
+username: abrahamazar
+account: abrahamazar
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 14913365
+bundleId: 10438999
+url: https://abrahamazar.shinyapps.io/AnalysisApp/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: README.md
