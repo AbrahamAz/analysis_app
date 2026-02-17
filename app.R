@@ -265,26 +265,26 @@ ui <- fluidPage(
                       )
              ),
              
-             # tabPanel("Map Output",
-             #          sidebarPanel(
-             #            uiOutput("country_title"),
-             #            uiOutput("admin_choice"),
-             #            uiOutput("sheetInputMap"),
-             #            uiOutput("correct_column"),
-             #            uiOutput("admin_data_col"),
-             #            uiOutput("type_of_map"),
-             #            uiOutput("varMap"),
-             #            uiOutput("categoryMap"),
-             #            uiOutput("color"),
-             #            uiOutput("weightMap"),
-             #            uiOutput("buildBTN"),
-             #            uiOutput("downloadBtn")
-             #          ),
-             #          mainPanel(
-             #            uiOutput("map"),
-             #            uiOutput("tableMap")
-             #          )
-             # )
+             tabPanel("Map Output",
+                      sidebarPanel(
+                        uiOutput("country_title"),
+                        uiOutput("admin_choice"),
+                        uiOutput("sheetInputMap"),
+                        uiOutput("correct_column"),
+                        uiOutput("admin_data_col"),
+                        uiOutput("type_of_map"),
+                        uiOutput("varMap"),
+                        uiOutput("categoryMap"),
+                        uiOutput("color"),
+                        uiOutput("weightMap"),
+                        uiOutput("buildBTN"),
+                        uiOutput("downloadBtn")
+                      ),
+                      mainPanel(
+                        uiOutput("map"),
+                        uiOutput("tableMap")
+                      )
+             )
              ,
   )
 )
