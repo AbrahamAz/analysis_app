@@ -1,36 +1,18 @@
-library(shiny)
-library(dplyr)
-library(readxl)
-library(scales)
-library(stringr)
-library(DT)
-library(tidyverse)
-library(cluster) 
-library(survey) 
-library(srvyr)
-library(shinycssloaders)
-library(DescTools)
-library(shinybusy)
-library(echarts4r)
-library(rstatix)
-library(fastDummies)
-library(bslib)
-library(shinyBS)
-library(leaflet)
-library(leaflet.extras)
-library(exactextractr)
-library(zip)
-library(mapview)
-library(shinyauthr)
-library(sf)
-library(Microsoft365R)
-library(shinyjs)
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+
+pacman::p_load(
+  shiny, dplyr, readxl, scales, stringr, DT, tidyverse, cluster,
+  survey, srvyr, shinycssloaders, DescTools, shinybusy, echarts4r,
+  rstatix, fastDummies, bslib, shinyBS, leaflet, leaflet.extras,
+  exactextractr, zip, mapview, shinyauthr, sf, shinyjs
+)
+
 # webshot::install_phantomjs(force = T)
 rm(list=ls())
 source("www/src/utils/misc_utils.R")
 source("www/src/utils/kobo_utils.R")
 source("www/src/utils/tabular_analysis_utils.R")
-source("www/src/STX_sharepoint_connector.R")
+# source("www/src/STX_sharepoint_connector.R")
 
 options(shiny.maxRequestSize=100*1024^2,
         rsconnect.max.bundle.files = 5145728000)
