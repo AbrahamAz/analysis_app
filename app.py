@@ -66,7 +66,7 @@ for k in DEFAULT_KEYS:
 # ----------------------------
 if not st.session_state.logged_in:
     logo = Image.open("src/images/logo_beginning.png")
-    st.image(logo, width=120)
+    st.image(logo, width=40)
     st.markdown("<h2 style='text-align: center;'>QuicKobo Analysis App</h2>", unsafe_allow_html=True)
     st.markdown("### Login")
 
