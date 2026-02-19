@@ -14,6 +14,7 @@ from src.utils.functions import *  # your helper functions
 # ----------------------------
 st.set_page_config(page_title="Analysis App", layout="wide")
 
+
 # ----------------------------
 # SESSION DEFAULTS
 # ----------------------------
@@ -45,13 +46,7 @@ for k in DEFAULT_KEYS:
         st.session_state[k] = None
 
 
-
-
-# # ----------------------------
-# # MAIN APP
-# # ----------------------------
-# if st.session_state.logged_in:
-#     # Sidebar: connection/auth
+# Sidebar: connection/auth
 st.sidebar.markdown("## 🔌 Connection")
 st.session_state.kobo_url = st.sidebar.text_input(
     "Kobo server URL",
